@@ -1,4 +1,6 @@
 from voiceagents.realtime.contracts import (
+    ALLOWED_REALTIME_TOOL_NAMES,
+    DEFAULT_REALTIME_INSTRUCTIONS,
     RealtimeClientSecretRequest,
     RealtimeClientSecretResponse,
     RealtimeProviderName,
@@ -8,6 +10,7 @@ from voiceagents.realtime.contracts import (
     RealtimeToolDefinition,
     ResponseMode,
     VoiceSessionState,
+    build_default_realtime_session_config,
 )
 from voiceagents.contracts.common import HandoffReason, ToolErrorCode
 
@@ -153,3 +156,20 @@ def test_tool_call_response_contains_safe_output_shape() -> None:
 
     assert response.handoff_required is True
     assert response.error_code is ToolErrorCode.NOT_FOUND
+
+
+def test_default_session_config_contains_only_allowed_tools() -> None:
+    config = build_default_realtime_session_config()
+    tool_names = {tool.name for tool in config.tools}
+
+    assert tool_names == ALLOWED_REALTIME_TOOL_NAMES
+    assert config.model_dump()["tools"][0]["parameters_schema"]["type"] == "object"
+
+
+def test_default_session_instructions_encode_clarification_and_policy_rules() -> None:
+    instructions = DEFAULT_REALTIME_INSTRUCTIONS
+
+    assert "one clarification question" in instructions
+    assert "low_asr_confidence" in instructions
+    assert "order_id_unconfirmed" in instructions
+    assert "Do not approve refunds" in instructions

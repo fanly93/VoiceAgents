@@ -28,6 +28,24 @@ class RealtimeProviderName(StrEnum):
     OPENAI_REALTIME = "openai_realtime"
 
 
+ALLOWED_REALTIME_TOOL_NAMES = frozenset(
+    {
+        "lookup_order",
+        "lookup_logistics",
+        "query_product_knowledge",
+        "handoff_to_human",
+    }
+)
+
+DEFAULT_REALTIME_INSTRUCTIONS = (
+    "You are a VoiceAgents support assistant for ecommerce merchants. "
+    "Use only the provided tools for order, logistics, product knowledge, and handoff workflows. "
+    "Ask one clarification question when speech, order ID, or intent is unclear. "
+    "If clarification fails, call handoff_to_human with low_asr_confidence or order_id_unconfirmed. "
+    "Do not approve refunds, returns, or compensation unless a backend tool result or handoff policy says so."
+)
+
+
 class RealtimeToolDefinition(BaseModel):
     name: str = Field(min_length=1)
     description: str = Field(min_length=1)
@@ -96,3 +114,60 @@ class RealtimeToolCallResponse(BaseModel):
     handoff_required: bool
     handoff_reason: HandoffReason
     error_code: ToolErrorCode | None
+
+
+def build_default_realtime_session_config() -> RealtimeSessionConfig:
+    return RealtimeSessionConfig(
+        instructions=DEFAULT_REALTIME_INSTRUCTIONS,
+        tools=[
+            RealtimeToolDefinition(
+                name="lookup_order",
+                description="Look up safe order status fields for a confirmed order ID.",
+                parameters_schema={
+                    "type": "object",
+                    "properties": {"order_id": {"type": "string", "minLength": 1}},
+                    "required": ["order_id"],
+                    "additionalProperties": False,
+                },
+            ),
+            RealtimeToolDefinition(
+                name="lookup_logistics",
+                description="Look up safe logistics status fields for a confirmed order ID.",
+                parameters_schema={
+                    "type": "object",
+                    "properties": {"order_id": {"type": "string", "minLength": 1}},
+                    "required": ["order_id"],
+                    "additionalProperties": False,
+                },
+            ),
+            RealtimeToolDefinition(
+                name="query_product_knowledge",
+                description="Answer product usage questions using approved product knowledge.",
+                parameters_schema={
+                    "type": "object",
+                    "properties": {
+                        "query": {"type": "string", "minLength": 1},
+                        "locale": {"type": ["string", "null"]},
+                    },
+                    "required": ["query"],
+                    "additionalProperties": False,
+                },
+            ),
+            RealtimeToolDefinition(
+                name="handoff_to_human",
+                description="Create a safe handoff request when the flow cannot be resolved automatically.",
+                parameters_schema={
+                    "type": "object",
+                    "properties": {
+                        "reason": {
+                            "type": "string",
+                            "enum": [reason.value for reason in HandoffReason],
+                        },
+                        "summary": {"type": "string", "minLength": 1},
+                    },
+                    "required": ["reason", "summary"],
+                    "additionalProperties": False,
+                },
+            ),
+        ],
+    )
