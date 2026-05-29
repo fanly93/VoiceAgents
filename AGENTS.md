@@ -51,3 +51,9 @@ git switch -c feat/<short-feature-name>
 3. `$gstack-review`
 4. 修复 review findings
 5. push / PR / merge
+
+`$gstack-review` 必须在开发分支仍存在、且合并到 `main` 之前运行。它依赖“当前分支 vs base branch”的 diff；如果已经合并并同步到 `main`，标准 review 会没有分支差异，不能作为 PR 前置审查。
+
+合并后如需收口，使用文档归档/一致性校验流程：检查 docs/spec/task/README 与实际实现、测试证据、安全边界和 out-of-scope 是否一致。此类检查可以补充 `$gstack-document-release`，但不能替代 merge 前的 `$gstack-review`。
+
+在进入归档或下一阶段前，建议主动询问用户是否需要做一次一致性校验。
