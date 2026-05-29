@@ -1,8 +1,10 @@
 from datetime import datetime, timezone
 import os
+from pathlib import Path
 import uuid
 
 from fastapi import FastAPI, Header, HTTPException
+from fastapi.responses import FileResponse
 
 from voiceagents.adapters.handoff import MockHandoffAdapter
 from voiceagents.adapters.knowledge import MockKnowledgeAdapter
@@ -32,6 +34,9 @@ from voiceagents.realtime.tool_router import (
     RealtimeToolRouter,
     UnknownRealtimeToolError,
 )
+
+
+REALTIME_TEST_PAGE_PATH = Path(__file__).parent / "static" / "realtime-test.html"
 
 
 def create_app(
@@ -65,6 +70,10 @@ def create_app(
     @app.post("/v1/calls/simulate")
     def simulate_call(call: CallFlowInput) -> CallFlowOutput:
         return call_flow_service.handle(call)
+
+    @app.get("/realtime-test")
+    def realtime_test_page() -> FileResponse:
+        return FileResponse(REALTIME_TEST_PAGE_PATH, media_type="text/html")
 
     @app.post("/v1/realtime/client-secret")
     def create_realtime_client_secret(
