@@ -185,6 +185,36 @@
         );
       }
 
+      async function relayToolCall(toolName, argumentsPayload) {
+        if (!state.sessionId || !state.callId || !state.toolCallToken) {
+          throw new Error("No active realtime session.");
+        }
+
+        const startedAt = performance.now();
+        const response = await fetch("/v1/realtime/tool-call", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${state.toolCallToken}`,
+          },
+          body: JSON.stringify({
+            session_id: state.sessionId,
+            call_id: state.callId,
+            merchant_id: "merchant-demo",
+            tool_name: toolName,
+            arguments: argumentsPayload,
+          }),
+        });
+
+        const payload = await response.json();
+        writePanel("latency", `${Math.round(performance.now() - startedAt)} ms`);
+        appendPanel("tool-calls", `${toolName}: ${payload.safe_summary || response.status}`);
+        if (payload.handoff_required) {
+          writePanel("handoff-state", payload.handoff_reason || "handoff_required");
+        }
+        return payload;
+      }
+
       function stopSession() {
         state.sessionId = null;
         state.callId = null;
@@ -204,6 +234,11 @@
         const button = el("mute-toggle");
         button.textContent = button.textContent === "Mute" ? "Unmute" : "Mute";
       });
+
+      window.voiceAgentsRealtimeTest = {
+        relayToolCall,
+        getSessionConfig: () => state.sessionConfig,
+      };
     </script>
   </body>
 </html>

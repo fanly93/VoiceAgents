@@ -42,3 +42,13 @@ def test_realtime_test_page_bootstrap_js_uses_client_secret_endpoint() -> None:
     assert "OPENAI_API_KEY" not in html
     assert "writePanel(\"provider-events\", payload.client_secret" not in html
     assert "writePanel(\"provider-events\", payload.tool_call_token" not in html
+
+
+def test_realtime_test_page_tool_relay_uses_header_token() -> None:
+    html = STATIC_PAGE.read_text(encoding="utf-8")
+
+    assert 'fetch("/v1/realtime/tool-call"' in html
+    assert "Authorization: `Bearer ${state.toolCallToken}`" in html
+    assert "tool_name: toolName" in html
+    assert 'id="tool-calls"' in html
+    assert "window.voiceAgentsRealtimeTest" in html
