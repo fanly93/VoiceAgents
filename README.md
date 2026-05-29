@@ -112,6 +112,12 @@ Current realtime scope is browser/local validation only. This phase does not imp
 
 Local realtime event logs under `.voiceagents/` are gitignored. Treat the tool-call relay token as a short-lived session credential; do not write it to logs, screenshots, tickets, or committed files.
 
+Run the realtime smoke test against a running mock-mode server:
+
+```bash
+python3 scripts/smoke_realtime_api.py --base-url http://127.0.0.1:8000
+```
+
 Validate example payload compatibility without starting a server:
 
 ```bash

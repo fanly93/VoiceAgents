@@ -21,7 +21,7 @@ from voiceagents.realtime.contracts import (
     VoiceEvent,
     VoiceSessionState,
 )
-from voiceagents.realtime.event_log import InMemoryVoiceEventRepository, VoiceEventRepository
+from voiceagents.realtime.event_log import JsonlVoiceEventRepository, VoiceEventRepository
 from voiceagents.realtime.providers import (
     MockRealtimeProvider,
     OpenAIRealtimeProvider,
@@ -52,7 +52,7 @@ def create_app(
         knowledge_adapter=MockKnowledgeAdapter(),
     )
     session_store = realtime_session_store or InMemoryVoiceSessionStore()
-    event_repository = realtime_event_repository or InMemoryVoiceEventRepository()
+    event_repository = realtime_event_repository or JsonlVoiceEventRepository()
     tool_router = RealtimeToolRouter(
         session_store=session_store,
         order_adapter=MockOrderAdapter(),
@@ -84,7 +84,8 @@ def create_app(
             call_id=request.call_id,
             merchant_id=request.merchant_id,
         )
-        provider = _build_realtime_provider()
+        provider_name = _current_realtime_provider_name()
+        provider = _build_realtime_provider(provider_name)
         try:
             provider_response = provider.create_client_secret(request)
         except RealtimeProviderError as error:
@@ -151,7 +152,7 @@ def create_app(
                 tool_result_summary=response.safe_summary,
                 handoff_reason=response.handoff_reason,
                 latency_ms=None,
-                provider=RealtimeProviderName.MOCK,
+                provider=_current_realtime_provider_name(),
                 provider_event_type=None,
                 redaction_applied=False,
             )
@@ -166,11 +167,20 @@ def create_app(
     return app
 
 
-def _build_realtime_provider() -> MockRealtimeProvider | OpenAIRealtimeProvider:
+def _current_realtime_provider_name() -> RealtimeProviderName:
     provider_name = os.getenv("VOICEAGENTS_REALTIME_PROVIDER", RealtimeProviderName.MOCK.value)
-    if provider_name == RealtimeProviderName.MOCK.value:
+    try:
+        return RealtimeProviderName(provider_name)
+    except ValueError as error:
+        raise HTTPException(status_code=500, detail=f"Unsupported realtime provider: {provider_name}") from error
+
+
+def _build_realtime_provider(
+    provider_name: RealtimeProviderName,
+) -> MockRealtimeProvider | OpenAIRealtimeProvider:
+    if provider_name is RealtimeProviderName.MOCK:
         return MockRealtimeProvider()
-    if provider_name == RealtimeProviderName.OPENAI_REALTIME.value:
+    if provider_name is RealtimeProviderName.OPENAI_REALTIME:
         return OpenAIRealtimeProvider(
             api_key=os.getenv("OPENAI_API_KEY"),
             model=os.getenv("VOICEAGENTS_OPENAI_REALTIME_MODEL", "gpt-realtime"),
