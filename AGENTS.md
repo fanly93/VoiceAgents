@@ -29,3 +29,25 @@ env HOME="$PWD/.gstack-home" GSTACK_HOME="$PWD/.gstack" GSTACK_STATE_DIR="$PWD/.
 `$gstack-browse` 需要绑定 localhost；在 Codex 沙箱中可能需要申请非沙箱执行。
 
 完整验证记录和排障细节见 `problems/gstack-project-local-usage-2026-05-28.md`。
+
+## 分支开发规范
+
+后续每个新需求必须从干净的 `main` 新建 feature branch 开发，不要直接在 `main` 上继续实现需求。
+
+推荐流程：
+
+```bash
+git switch main
+git pull --ff-only
+git switch -c feat/<short-feature-name>
+```
+
+原因：`$gstack-review` 按“当前分支 vs base branch”审查 diff。若直接在已同步的 `main` 上开发并推送，标准 review 会显示没有分支差异，无法自然完成 PR 前置审查。
+
+每个需求应在独立分支内完成：
+
+1. 需求澄清 / spec / task 拆分
+2. 代码实现与测试
+3. `$gstack-review`
+4. 修复 review findings
+5. push / PR / merge
