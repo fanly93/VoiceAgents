@@ -30,6 +30,22 @@ def test_redact_text_replaces_order_like_ids() -> None:
     assert result.redaction_applied is True
 
 
+def test_redact_text_replaces_redacted_order_like_ids_consistently() -> None:
+    result = redact_text("Order ORDER-REDACTED-001 has been paid.")
+
+    assert result.value == "Order [ORDER_REDACTED] has been paid."
+    assert result.redaction_applied is True
+
+
+def test_redact_text_does_not_treat_iso_timestamp_as_phone() -> None:
+    timestamp = "2026-05-29T12:28:31.165404+00:00"
+
+    result = redact_text(timestamp)
+
+    assert result.value == timestamp
+    assert result.redaction_applied is False
+
+
 def test_redact_mapping_recursively_redacts_dicts_lists_and_strings() -> None:
     payload = {
         "email": "customer@example.com",

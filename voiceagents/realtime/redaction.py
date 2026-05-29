@@ -24,9 +24,11 @@ class Redactor(Protocol):
 
 class BasicTextRedactor:
     _EMAIL_RE = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
-    _PHONE_RE = re.compile(r"(?<!\w)(?:\+?\d[\d\s().-]{7,}\d)(?!\w)")
+    _PHONE_RE = re.compile(
+        r"(?<!\w)(?:\+\d[\d\s().-]{7,}\d|\(?\d{3}\)?[-.\s]\d{3}[-.\s]\d{4})(?!\w)"
+    )
     _ORDER_RE = re.compile(
-        r"\b(?:ORD|ORDER)[-_]?[A-Z0-9]*\d[A-Z0-9-]*\b",
+        r"\b(?:ORDER|ORD)[-_]?[A-Z0-9-]*\d[A-Z0-9-]*\b",
         re.IGNORECASE,
     )
 
