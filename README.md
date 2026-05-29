@@ -106,7 +106,7 @@ VOICEAGENTS_OPENAI_REALTIME_MODEL=gpt-realtime
 VOICEAGENTS_OPENAI_REALTIME_VOICE=alloy
 ```
 
-`VOICEAGENTS_OPENAI_REALTIME_MODEL` and `VOICEAGENTS_OPENAI_REALTIME_VOICE` are optional. If `OPENAI_API_KEY` is missing, the API fails safely with a 503 response instead of exposing provider credentials.
+`VOICEAGENTS_OPENAI_REALTIME_MODEL` and `VOICEAGENTS_OPENAI_REALTIME_VOICE` are optional. If `OPENAI_API_KEY` is missing, the API fails safely with a 503 response instead of exposing provider credentials. Real OpenAI Realtime session creation is intentionally not wired in this phase; it belongs to the next voice integration spec.
 
 Current realtime scope is browser/local validation only. This phase does not implement telephony, phone-number provisioning, inbound/outbound calling, or raw audio storage.
 
