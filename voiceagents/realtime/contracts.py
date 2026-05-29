@@ -116,6 +116,28 @@ class RealtimeToolCallResponse(BaseModel):
     error_code: ToolErrorCode | None
 
 
+class VoiceEvent(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    event_id: str = Field(min_length=1)
+    timestamp: str = Field(min_length=1)
+    session_id: str = Field(min_length=1)
+    call_id: str = Field(min_length=1)
+    merchant_id: str = Field(min_length=1)
+    state: VoiceSessionState
+    event_type: str = Field(min_length=1)
+    transcript_text_redacted: str | None
+    response_text_redacted: str | None
+    tool_name: str | None
+    tool_arguments_redacted: dict[str, object] | None
+    tool_result_summary: str | None
+    handoff_reason: HandoffReason | None
+    latency_ms: int | None = Field(default=None, ge=0)
+    provider: RealtimeProviderName
+    provider_event_type: str | None
+    redaction_applied: bool
+
+
 def build_default_realtime_session_config() -> RealtimeSessionConfig:
     return RealtimeSessionConfig(
         instructions=DEFAULT_REALTIME_INSTRUCTIONS,

@@ -9,6 +9,7 @@ from voiceagents.realtime.contracts import (
     RealtimeToolCallResponse,
     RealtimeToolDefinition,
     ResponseMode,
+    VoiceEvent,
     VoiceSessionState,
     build_default_realtime_session_config,
 )
@@ -173,3 +174,56 @@ def test_default_session_instructions_encode_clarification_and_policy_rules() ->
     assert "low_asr_confidence" in instructions
     assert "order_id_unconfirmed" in instructions
     assert "Do not approve refunds" in instructions
+
+
+def test_voice_event_contains_redacted_structured_fields() -> None:
+    event = VoiceEvent(
+        event_id="event-123",
+        timestamp="2026-05-29T09:00:00Z",
+        session_id="session-123",
+        call_id="call-123",
+        merchant_id="merchant-123",
+        state=VoiceSessionState.TOOL_CALLING,
+        event_type="tool_call",
+        transcript_text_redacted="My order is [ORDER_REDACTED].",
+        response_text_redacted=None,
+        tool_name="lookup_order",
+        tool_arguments_redacted={"order_id": "[ORDER_REDACTED]"},
+        tool_result_summary="Order is paid.",
+        handoff_reason=None,
+        latency_ms=120,
+        provider=RealtimeProviderName.MOCK,
+        provider_event_type="response.function_call_arguments.done",
+        redaction_applied=True,
+    )
+
+    assert event.state is VoiceSessionState.TOOL_CALLING
+    assert event.tool_arguments_redacted == {"order_id": "[ORDER_REDACTED]"}
+
+
+def test_voice_event_rejects_raw_audio_extra_field() -> None:
+    try:
+        VoiceEvent(
+            event_id="event-123",
+            timestamp="2026-05-29T09:00:00Z",
+            session_id="session-123",
+            call_id="call-123",
+            merchant_id="merchant-123",
+            state=VoiceSessionState.LISTENING,
+            event_type="audio",
+            transcript_text_redacted=None,
+            response_text_redacted=None,
+            tool_name=None,
+            tool_arguments_redacted=None,
+            tool_result_summary=None,
+            handoff_reason=None,
+            latency_ms=None,
+            provider=RealtimeProviderName.MOCK,
+            provider_event_type=None,
+            redaction_applied=False,
+            raw_audio=b"not-allowed",
+        )
+    except ValueError as error:
+        assert "raw_audio" in str(error)
+    else:
+        raise AssertionError("VoiceEvent must reject raw_audio")
