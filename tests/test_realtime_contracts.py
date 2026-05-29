@@ -3,10 +3,13 @@ from voiceagents.realtime.contracts import (
     RealtimeClientSecretResponse,
     RealtimeProviderName,
     RealtimeSessionConfig,
+    RealtimeToolCallRequest,
+    RealtimeToolCallResponse,
     RealtimeToolDefinition,
     ResponseMode,
     VoiceSessionState,
 )
+from voiceagents.contracts.common import HandoffReason, ToolErrorCode
 
 
 def test_voice_session_states_match_spec() -> None:
@@ -106,3 +109,47 @@ def test_client_secret_response_contains_session_config_and_relay_token() -> Non
 
     assert response.tool_call_token == "mock-tool-token"
     assert response.session_config.tools[0].name == "lookup_order"
+
+
+def test_tool_call_request_contains_no_body_token() -> None:
+    request = RealtimeToolCallRequest(
+        session_id="session-123",
+        call_id="call-123",
+        merchant_id="merchant-123",
+        tool_name="lookup_order",
+        arguments={"order_id": "ORDER-REDACTED-001"},
+    )
+
+    assert request.tool_name == "lookup_order"
+    assert "tool_call_token" not in request.model_fields_set
+
+
+def test_tool_call_request_rejects_body_token() -> None:
+    try:
+        RealtimeToolCallRequest(
+            session_id="session-123",
+            call_id="call-123",
+            merchant_id="merchant-123",
+            tool_name="lookup_order",
+            arguments={"order_id": "ORDER-REDACTED-001"},
+            tool_call_token="must-not-be-in-body",
+        )
+    except ValueError as error:
+        assert "tool_call_token" in str(error)
+    else:
+        raise AssertionError("tool_call_token must not be accepted in request body")
+
+
+def test_tool_call_response_contains_safe_output_shape() -> None:
+    response = RealtimeToolCallResponse(
+        ok=False,
+        tool_name="lookup_order",
+        result={},
+        safe_summary="Order was not found.",
+        handoff_required=True,
+        handoff_reason=HandoffReason.TOOL_ERROR,
+        error_code=ToolErrorCode.NOT_FOUND,
+    )
+
+    assert response.handoff_required is True
+    assert response.error_code is ToolErrorCode.NOT_FOUND

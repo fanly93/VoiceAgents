@@ -1,7 +1,9 @@
 from enum import StrEnum
 import re
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from voiceagents.contracts.common import HandoffReason, ToolErrorCode
 
 
 class VoiceSessionState(StrEnum):
@@ -38,6 +40,8 @@ class RealtimeSessionConfig(BaseModel):
 
 
 class RealtimeClientSecretRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     session_id: str = Field(min_length=1)
     call_id: str = Field(min_length=1)
     merchant_id: str = Field(min_length=1)
@@ -58,6 +62,8 @@ class RealtimeClientSecretRequest(BaseModel):
 
 
 class RealtimeClientSecretResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     provider: RealtimeProviderName
     session_id: str = Field(min_length=1)
     call_id: str = Field(min_length=1)
@@ -68,3 +74,25 @@ class RealtimeClientSecretResponse(BaseModel):
     model: str = Field(min_length=1)
     voice: str | None
     session_config: RealtimeSessionConfig
+
+
+class RealtimeToolCallRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    session_id: str = Field(min_length=1)
+    call_id: str = Field(min_length=1)
+    merchant_id: str = Field(min_length=1)
+    tool_name: str = Field(min_length=1)
+    arguments: dict[str, object]
+
+
+class RealtimeToolCallResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ok: bool
+    tool_name: str
+    result: dict[str, object]
+    safe_summary: str
+    handoff_required: bool
+    handoff_reason: HandoffReason
+    error_code: ToolErrorCode | None
