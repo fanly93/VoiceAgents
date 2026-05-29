@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>VoiceAgents Realtime Test</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: Arial, sans-serif;
+        background: #f5f7fb;
+        color: #172033;
+      }
+
+      body {
+        margin: 0;
+      }
+
+      main {
+        display: grid;
+        gap: 16px;
+        max-width: 1120px;
+        margin: 0 auto;
+        padding: 24px;
+      }
+
+      header,
+      section {
+        background: #ffffff;
+        border: 1px solid #d9e0ec;
+        border-radius: 8px;
+        padding: 16px;
+      }
+
+      h1,
+      h2 {
+        margin: 0 0 12px;
+      }
+
+      h1 {
+        font-size: 24px;
+      }
+
+      h2 {
+        font-size: 16px;
+      }
+
+      .toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      button,
+      select {
+        min-height: 36px;
+        border: 1px solid #aab5c8;
+        border-radius: 6px;
+        background: #ffffff;
+        color: #172033;
+        padding: 0 12px;
+        font-size: 14px;
+      }
+
+      button {
+        cursor: pointer;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 16px;
+      }
+
+      [data-panel] {
+        min-height: 96px;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+
+      .handoff {
+        border-color: #d48b20;
+        background: #fff8ed;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>VoiceAgents Realtime Test</h1>
+        <div class="toolbar">
+          <button id="start-session" type="button">Start</button>
+          <button id="stop-session" type="button">Stop</button>
+          <button id="mute-toggle" type="button">Mute</button>
+          <select id="response-mode" aria-label="Response mode">
+            <option value="text">Text</option>
+            <option value="voice">Voice</option>
+          </select>
+        </div>
+      </header>
+
+      <div class="grid">
+        <section>
+          <h2>Session State</h2>
+          <div id="session-state" data-panel>idle</div>
+        </section>
+        <section>
+          <h2>Transcript</h2>
+          <div id="transcript" data-panel></div>
+        </section>
+        <section>
+          <h2>Assistant Response</h2>
+          <div id="assistant-response" data-panel></div>
+        </section>
+        <section>
+          <h2>Tool Calls</h2>
+          <div id="tool-calls" data-panel></div>
+        </section>
+        <section class="handoff">
+          <h2>Handoff</h2>
+          <div id="handoff-state" data-panel>none</div>
+        </section>
+        <section>
+          <h2>Latency</h2>
+          <div id="latency" data-panel></div>
+        </section>
+        <section>
+          <h2>Provider Events</h2>
+          <div id="provider-events" data-panel></div>
+        </section>
+      </div>
+    </main>
+    <script>
+      const state = {
+        sessionId: null,
+        callId: null,
+        toolCallToken: null,
+        sessionConfig: null,
+      };
+
+      const el = (id) => document.getElementById(id);
+      const writePanel = (id, value) => {
+        el(id).textContent = value;
+      };
+      const appendPanel = (id, value) => {
+        const panel = el(id);
+        panel.textContent = panel.textContent ? `${panel.textContent}\n${value}` : value;
+      };
+
+      const newId = (prefix) => `${prefix}-${crypto.randomUUID()}`;
+
+      async function startSession() {
+        state.sessionId = newId("session");
+        state.callId = newId("call");
+        writePanel("session-state", "starting");
+
+        const startedAt = performance.now();
+        const response = await fetch("/v1/realtime/client-secret", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            session_id: state.sessionId,
+            call_id: state.callId,
+            merchant_id: "merchant-demo",
+            response_mode: el("response-mode").value,
+            locale: "en-US",
+            safety_subject_id: "browser_demo_subject",
+          }),
+        });
+
+        if (!response.ok) {
+          writePanel("session-state", `error ${response.status}`);
+          appendPanel("provider-events", await response.text());
+          return;
+        }
+
+        const payload = await response.json();
+        state.toolCallToken = payload.tool_call_token;
+        state.sessionConfig = payload.session_config;
+        writePanel("session-state", "ready");
+        writePanel("latency", `${Math.round(performance.now() - startedAt)} ms`);
+        appendPanel(
+          "provider-events",
+          `provider=${payload.provider} model=${payload.model} tools=${payload.session_config.tools.length}`,
+        );
+      }
+
+      async function relayToolCall(toolName, argumentsPayload) {
+        if (!state.sessionId || !state.callId || !state.toolCallToken) {
+          throw new Error("No active realtime session.");
+        }
+
+        const startedAt = performance.now();
+        const response = await fetch("/v1/realtime/tool-call", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${state.toolCallToken}`,
+          },
+          body: JSON.stringify({
+            session_id: state.sessionId,
+            call_id: state.callId,
+            merchant_id: "merchant-demo",
+            tool_name: toolName,
+            arguments: argumentsPayload,
+          }),
+        });
+
+        const payload = await response.json();
+        writePanel("latency", `${Math.round(performance.now() - startedAt)} ms`);
+        appendPanel("tool-calls", `${toolName}: ${payload.safe_summary || response.status}`);
+        if (payload.handoff_required) {
+          writePanel("handoff-state", payload.handoff_reason || "handoff_required");
+        }
+        return payload;
+      }
+
+      function stopSession() {
+        state.sessionId = null;
+        state.callId = null;
+        state.toolCallToken = null;
+        state.sessionConfig = null;
+        writePanel("session-state", "ended");
+      }
+
+      el("start-session").addEventListener("click", () => {
+        startSession().catch((error) => {
+          writePanel("session-state", "error");
+          appendPanel("provider-events", error.message);
+        });
+      });
+      el("stop-session").addEventListener("click", stopSession);
+      el("mute-toggle").addEventListener("click", () => {
+        const button = el("mute-toggle");
+        button.textContent = button.textContent === "Mute" ? "Unmute" : "Mute";
+      });
+
+      window.voiceAgentsRealtimeTest = {
+        relayToolCall,
+        getSessionConfig: () => state.sessionConfig,
+      };
+    </script>
+  </body>
+</html>

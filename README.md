@@ -13,14 +13,15 @@ Real pilot call recordings are not available yet, so real-call evaluation is def
 - Define handoff and failure rules for the MVP.
 - Validate call evaluation data before it is used as an acceptance baseline.
 - Run local HTTP end-to-end examples against the backend skeleton.
+- Validate browser/local realtime voice session plumbing with mock-safe provider behavior.
 
 ## Out of Scope for the Current Phase
 
-- Voice-model integration.
-- OpenAI, ASR, TTS, or realtime voice provider dependencies.
+- Production voice-model integration.
+- Production OpenAI, ASR, TTS, or realtime voice provider dependency.
 - Telephony provider integration.
 - Phone-number provisioning or inbound/outbound calling.
-- Audio file input, audio file output, or recording processing.
+- Audio file input, audio file output, recording processing, or raw audio storage.
 - Production merchant API integration.
 - Real customer data, raw recordings, or PII.
 
@@ -42,7 +43,7 @@ python3 scripts/validate_call_evaluations.py data/call-evaluations/sample.json
 Run the local backend skeleton:
 
 ```bash
-uvicorn voiceagents.api.main:app --reload
+python3 -m uvicorn voiceagents.api.main:app --reload
 ```
 
 Check health:
@@ -76,6 +77,46 @@ python3 scripts/smoke_api.py --base-url http://127.0.0.1:8000
 ```
 
 The smoke script calls `/health`, then submits every JSON payload in `examples/call-simulations/` to `/v1/calls/simulate`.
+
+## Realtime Browser Test
+
+Start the API in mock realtime provider mode. This is the default, but the explicit environment variable keeps local runs clear:
+
+```bash
+VOICEAGENTS_REALTIME_PROVIDER=mock python3 -m uvicorn voiceagents.api.main:app --reload
+```
+
+Open the browser test page:
+
+```text
+http://127.0.0.1:8000/realtime-test
+```
+
+Realtime API endpoints:
+
+- `POST /v1/realtime/client-secret` creates a local realtime session and returns provider credentials plus a session-bound `tool_call_token`.
+- `POST /v1/realtime/tool-call` relays approved realtime tool calls to the backend. Send the relay token as `Authorization: Bearer <tool_call_token>`.
+
+OpenAI realtime provider mode is selected with:
+
+```bash
+VOICEAGENTS_REALTIME_PROVIDER=openai_realtime
+OPENAI_API_KEY=...
+VOICEAGENTS_OPENAI_REALTIME_MODEL=gpt-realtime
+VOICEAGENTS_OPENAI_REALTIME_VOICE=alloy
+```
+
+`VOICEAGENTS_OPENAI_REALTIME_MODEL` and `VOICEAGENTS_OPENAI_REALTIME_VOICE` are optional. If `OPENAI_API_KEY` is missing, the API fails safely with a 503 response instead of exposing provider credentials.
+
+Current realtime scope is browser/local validation only. This phase does not implement telephony, phone-number provisioning, inbound/outbound calling, or raw audio storage.
+
+Local realtime event logs under `.voiceagents/` are gitignored. Treat the tool-call relay token as a short-lived session credential; do not write it to logs, screenshots, tickets, or committed files.
+
+Run the realtime smoke test against a running mock-mode server:
+
+```bash
+python3 scripts/smoke_realtime_api.py --base-url http://127.0.0.1:8000
+```
 
 Validate example payload compatibility without starting a server:
 

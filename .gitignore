@@ -7,6 +7,7 @@ __pycache__/
 .bun/
 .gstack/
 .gstack-home/
+.voiceagents/
 
 # Repo-local gstack install generated for this working copy.
 .agents/skills/gstack/
