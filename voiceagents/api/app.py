@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 import os
 import uuid
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, Header, HTTPException
 
 from voiceagents.adapters.handoff import MockHandoffAdapter
 from voiceagents.adapters.knowledge import MockKnowledgeAdapter
@@ -14,6 +14,8 @@ from voiceagents.realtime.contracts import (
     RealtimeClientSecretRequest,
     RealtimeClientSecretResponse,
     RealtimeProviderName,
+    RealtimeToolCallRequest,
+    RealtimeToolCallResponse,
     VoiceEvent,
     VoiceSessionState,
 )
@@ -24,6 +26,12 @@ from voiceagents.realtime.providers import (
     RealtimeProviderError,
 )
 from voiceagents.realtime.session_store import InMemoryVoiceSessionStore
+from voiceagents.realtime.tool_router import (
+    InvalidToolArgumentsError,
+    InvalidToolCallTokenError,
+    RealtimeToolRouter,
+    UnknownRealtimeToolError,
+)
 
 
 def create_app(
@@ -40,6 +48,13 @@ def create_app(
     )
     session_store = realtime_session_store or InMemoryVoiceSessionStore()
     event_repository = realtime_event_repository or InMemoryVoiceEventRepository()
+    tool_router = RealtimeToolRouter(
+        session_store=session_store,
+        order_adapter=MockOrderAdapter(),
+        logistics_adapter=MockLogisticsAdapter(),
+        knowledge_adapter=MockKnowledgeAdapter(),
+        handoff_adapter=MockHandoffAdapter(),
+    )
     app.state.realtime_session_store = session_store
     app.state.realtime_event_repository = event_repository
 
@@ -92,6 +107,53 @@ def create_app(
         )
         return response
 
+    @app.post("/v1/realtime/tool-call")
+    def execute_realtime_tool_call(
+        request: RealtimeToolCallRequest,
+        authorization: str | None = Header(default=None),
+    ) -> RealtimeToolCallResponse:
+        tool_call_token = _extract_bearer_token(authorization)
+        try:
+            response = tool_router.execute(request, tool_call_token=tool_call_token)
+        except UnknownRealtimeToolError as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
+        except InvalidToolArgumentsError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+        except InvalidToolCallTokenError as error:
+            raise HTTPException(status_code=403, detail=str(error)) from error
+
+        event_repository.append(
+            VoiceEvent(
+                event_id=str(uuid.uuid4()),
+                timestamp=datetime.now(timezone.utc).isoformat(),
+                session_id=request.session_id,
+                call_id=request.call_id,
+                merchant_id=request.merchant_id,
+                state=(
+                    VoiceSessionState.HANDOFF_PENDING
+                    if response.handoff_required
+                    else VoiceSessionState.TOOL_CALLING
+                ),
+                event_type="tool_call",
+                transcript_text_redacted=None,
+                response_text_redacted=None,
+                tool_name=request.tool_name,
+                tool_arguments_redacted=request.arguments,
+                tool_result_summary=response.safe_summary,
+                handoff_reason=response.handoff_reason,
+                latency_ms=None,
+                provider=RealtimeProviderName.MOCK,
+                provider_event_type=None,
+                redaction_applied=False,
+            )
+        )
+        session_store.append_tool_call(
+            request.session_id,
+            request.tool_name,
+            response.safe_summary,
+        )
+        return response
+
     return app
 
 
@@ -106,3 +168,12 @@ def _build_realtime_provider() -> MockRealtimeProvider | OpenAIRealtimeProvider:
             voice=os.getenv("VOICEAGENTS_OPENAI_REALTIME_VOICE", "alloy"),
         )
     raise HTTPException(status_code=500, detail=f"Unsupported realtime provider: {provider_name}")
+
+
+def _extract_bearer_token(authorization: str | None) -> str:
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Missing Authorization header")
+    scheme, _, token = authorization.partition(" ")
+    if scheme.lower() != "bearer" or not token:
+        raise HTTPException(status_code=401, detail="Malformed Authorization header")
+    return token
