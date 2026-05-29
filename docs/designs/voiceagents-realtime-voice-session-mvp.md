@@ -1,7 +1,7 @@
 # Realtime Voice Session MVP
 
 Status: DRAFT
-Source: `.gstack/projects/fanly93-VoiceAgents/tanglin-feat-voice-phase-design-design-20260529-162816.md`
+Source: `.gstack/projects/fanly93-VoiceAgents/feat-voice-phase-design-design-20260529-162816.md`
 
 ## Summary
 
@@ -62,6 +62,8 @@ VoiceAgents backend
 
 Creates a provider-specific ephemeral credential for browser Realtime sessions. Standard OpenAI API keys stay server-side.
 
+The response also returns a session-bound `tool_call_token` for `/v1/realtime/tool-call`. This token is not an OpenAI credential; it only authorizes tool-call relay for the created VoiceAgents session.
+
 ### `POST /v1/realtime/tool-call`
 
 Executes an approved Realtime function call.
@@ -69,6 +71,7 @@ Executes an approved Realtime function call.
 Required protections:
 
 - tool allowlist
+- session-bound `tool_call_token`
 - per-tool Pydantic argument schema
 - merchant/session/call validation
 - safe result fields only
