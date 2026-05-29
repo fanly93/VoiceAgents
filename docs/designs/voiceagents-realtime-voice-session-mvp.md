@@ -1,18 +1,21 @@
 # Realtime Voice Session MVP
 
-Status: DRAFT
+Status: IMPLEMENTED
 Source: `.gstack/projects/fanly93-VoiceAgents/feat-voice-phase-design-design-20260529-162816.md`
+Merged PR: https://github.com/fanly93/VoiceAgents/pull/1
+Merge commit: `ab79475`
 
 ## Summary
 
-This phase designs a browser/local realtime voice MVP for VoiceAgents. It proves that live speech can drive existing business tools and enter safe handoff states without implementing production telephony.
+This phase designed and shipped a browser/local realtime plumbing MVP for VoiceAgents. It proves that the browser test surface can create a realtime-like session, receive backend-generated tool definitions, relay tool calls to existing business tools, and enter safe handoff states without implementing production telephony.
 
-Chosen approach: browser connects directly to OpenAI Realtime over WebRTC using backend-minted ephemeral credentials. The browser receives backend-generated Realtime session instructions and tool definitions, then relays Realtime function calls to the VoiceAgents backend through `POST /v1/realtime/tool-call`; the backend validates and executes approved tools.
+Shipped approach: the browser receives mock-safe provider credentials plus backend-generated Realtime session instructions and tool definitions, then relays tool calls to the VoiceAgents backend through `POST /v1/realtime/tool-call`; the backend validates and executes approved tools. Real OpenAI Realtime WebRTC, microphone capture, and live speech-to-speech behavior are deferred to the next voice integration phase.
 
 ## In Scope
 
 - Minimal browser realtime voice test page.
-- OpenAI Realtime as first provider behind a provider abstraction.
+- Mock Realtime provider as the automated-test provider.
+- OpenAI Realtime provider boundary with missing-key safe failure.
 - Backend endpoint for ephemeral Realtime client credentials.
 - Backend-generated Realtime session instructions and tool definitions.
 - Unified backend tool-call endpoint: `POST /v1/realtime/tool-call`.
@@ -32,6 +35,9 @@ Chosen approach: browser connects directly to OpenAI Realtime over WebRTC using 
 - Audio recording storage.
 - Real customer PII in repo, fixtures, or local logs.
 - Merchant-facing sales demo UI.
+- Real OpenAI Realtime WebRTC session wiring.
+- Browser microphone capture and playback.
+- Live speech-to-speech voice model verification.
 
 ## Confirmed Product Goals
 
@@ -44,11 +50,11 @@ Chosen approach: browser connects directly to OpenAI Realtime over WebRTC using 
 
 ```text
 Browser test page
-  -> requests ephemeral Realtime credentials from VoiceAgents backend
-  -> connects to OpenAI Realtime over WebRTC
-  -> receives Realtime function call events
+  -> requests mock-safe Realtime connection data from VoiceAgents backend
+  -> receives backend-generated session instructions and tool definitions
+  -> can relay simulated Realtime function calls
   -> POSTs tool call to VoiceAgents backend
-  -> sends function_call_output back to Realtime
+  -> displays safe tool result or handoff state
 
 VoiceAgents backend
   -> validates session, merchant, tool_name, and arguments
@@ -156,6 +162,17 @@ Measured but not first-phase blockers:
 - voice naturalness
 - transcript accuracy under realistic accents/noise
 
-## Next Step
+## Implementation Result
 
-Create an implementation spec and task breakdown for this design. Do not start coding until the spec defines phases, out-of-scope items, interfaces, tests, and verification commands.
+Implemented and merged in PR #1. The shipped scope is browser/local realtime plumbing with mock-mode HTTP verification, not real OpenAI Realtime WebRTC audio.
+
+Shipped artifacts:
+
+- `voiceagents/realtime/` contracts, providers, session store, event log, redaction, and tool router.
+- `POST /v1/realtime/client-secret`
+- `POST /v1/realtime/tool-call`
+- `GET /realtime-test`
+- `scripts/smoke_realtime_api.py`
+- README setup instructions.
+
+Next phase: design real OpenAI Realtime WebRTC voice integration, including microphone capture, audio playback, provider session creation, turn-taking behavior, interruption behavior, and manual voice quality verification.

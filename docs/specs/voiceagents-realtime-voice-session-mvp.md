@@ -1,15 +1,17 @@
 # VoiceAgents Realtime Voice Session MVP Spec
 
-Status: DRAFT
+Status: IMPLEMENTED
 Branch: `feat/voice-phase-design`
 Source design: `docs/designs/voiceagents-realtime-voice-session-mvp.md`
 Date: 2026-05-29
+Merged PR: https://github.com/fanly93/VoiceAgents/pull/1
+Merge commit: `ab79475`
 
 ## Goal
 
-Build the first realtime voice-session MVP for VoiceAgents without implementing production telephony.
+Build the first browser/local realtime plumbing MVP for VoiceAgents without implementing production telephony.
 
-The MVP must prove that live browser speech can drive existing business tools and enter safe handoff states. It should use OpenAI Realtime as the first real provider, but all provider-specific behavior must sit behind a provider interface so a later backend proxy, telephony adapter, or chained ASR/CallFlow/TTS route can be added without rewriting the business layer.
+The MVP must prove that a browser test surface can initialize a realtime-like session, receive backend-generated tool definitions, relay tool calls to existing business tools, and enter safe handoff states. Provider-specific behavior sits behind a provider interface so real OpenAI Realtime WebRTC, a later backend proxy, a telephony adapter, or a chained ASR/CallFlow/TTS route can be added without rewriting the business layer.
 
 ## Non-Goals
 
@@ -22,14 +24,17 @@ The MVP must prove that live browser speech can drive existing business tools an
 - No merchant-facing sales demo UI.
 - No real customer PII in repo, fixtures, local logs, or tests.
 - No database migration in this phase; database persistence is represented by repository interfaces only.
+- No real OpenAI Realtime WebRTC session wiring.
+- No browser microphone capture or audio playback.
+- No live speech-to-speech model verification.
 
 ## Product Scope
 
 The first version uses a minimal browser test page:
 
 - Start/stop realtime session.
-- Capture microphone input.
-- Connect to OpenAI Realtime over WebRTC using backend-minted ephemeral credentials.
+- Bootstrap a browser test session through backend provider credentials.
+- Use mock-mode HTTP verification for automated tests.
 - Support text and voice response modes.
 - Display transcript, assistant response text, session state, tool calls, handoff state, latency, and provider events.
 - Use backend-generated Realtime session instructions and tool definitions.
@@ -49,14 +54,15 @@ Supported call paths:
 ```text
 Browser test page
   -> POST /v1/realtime/client-secret
-  -> WebRTC connection to OpenAI Realtime
-  -> receives Realtime function call events
+  -> receives provider connection data and backend-generated session config
+  -> can relay simulated Realtime function call events
   -> POST /v1/realtime/tool-call
-  -> sends function_call_output back to Realtime
+  -> displays safe tool result or handoff state
 
 VoiceAgents backend
   -> RealtimeProvider interface
-  -> OpenAIRealtimeProvider implementation
+  -> MockRealtimeProvider implementation
+  -> OpenAIRealtimeProvider boundary with missing-key safe failure
   -> VoiceSessionStore interface
   -> VoiceEventRepository interface
   -> InMemoryVoiceSessionStore
@@ -288,13 +294,13 @@ Rules:
 Implementations:
 
 - `MockRealtimeProvider`
-- `OpenAIRealtimeProvider`
+- `OpenAIRealtimeProvider` boundary with missing-key safe failure; real OpenAI session creation is deferred
 
 Configuration:
 
 - `VOICEAGENTS_REALTIME_PROVIDER=mock|openai_realtime`
 - `OPENAI_API_KEY` is required only for `openai_realtime`
-- `VOICEAGENTS_OPENAI_REALTIME_MODEL`, default to a documented realtime model at implementation time
+- `VOICEAGENTS_OPENAI_REALTIME_MODEL`, default configurable for the future real provider implementation
 - `VOICEAGENTS_OPENAI_REALTIME_VOICE`, default configurable
 
 The provider must not execute business tools. It only creates provider-specific session credentials or connection data.
@@ -392,6 +398,7 @@ Test requirements:
 - openai provider fails clearly when `OPENAI_API_KEY` is missing
 - response never includes a standard API key
 - response includes backend-generated session instructions and tool definitions
+- real OpenAI session creation remains deferred; this endpoint only verifies the provider boundary and missing-key failure path for `openai_realtime`
 - session is created in session store
 - event log records session creation
 - event log does not contain provider credentials or `tool_call_token`
@@ -471,8 +478,8 @@ Smoke tests:
 
 Manual verification:
 
-- with real OpenAI credentials, browser can start a Realtime session
-- function calls can be relayed through backend and returned to Realtime
+- mock-mode browser test page can start a local session
+- mock-mode function calls can be relayed through backend and displayed locally
 - handoff path enters `handoff_pending`
 - unclear speech or unconfirmed order ID causes one clarification attempt, then handoff if still unresolved
 
@@ -491,7 +498,7 @@ The phase is complete when:
 - unclear speech and unconfirmed order IDs have a documented clarification-then-handoff policy
 - event log contains redacted structured events and no raw audio, provider credentials, relay tokens, or unredacted PII
 - default local event-log path is ignored by git
-- documentation explains setup, env vars, mock mode, and real OpenAI mode
+- documentation explains setup, env vars, mock mode, and the deferred real OpenAI provider boundary
 
 ## Deferred
 
@@ -503,3 +510,6 @@ The phase is complete when:
 - production observability dashboards
 - real call recording evaluation
 - full PII detection for names/addresses
+- real OpenAI Realtime WebRTC session creation
+- browser microphone capture and audio playback
+- live speech-to-speech voice model verification

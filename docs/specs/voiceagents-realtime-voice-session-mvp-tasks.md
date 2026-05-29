@@ -1,7 +1,9 @@
 # VoiceAgents Realtime Voice Session MVP Tasks
 
-Status: DRAFT
+Status: COMPLETE
 Source spec: `docs/specs/voiceagents-realtime-voice-session-mvp.md`
+Merged PR: https://github.com/fanly93/VoiceAgents/pull/1
+Merge commit: `ab79475`
 
 Rules:
 
@@ -9,6 +11,7 @@ Rules:
 - Do not store raw audio.
 - Do not commit real PII.
 - Do not commit `.voiceagents/` local event logs.
+- Do not implement real OpenAI Realtime WebRTC, browser microphone capture, or live speech-to-speech verification in this phase.
 - Each task is intended to be separately commit-able.
 - Each task has explicit inputs and outputs.
 - Each task should include or preserve focused tests.
@@ -727,4 +730,4 @@ Stop for user approval before fixing any non-mechanical review findings.
 
 ## Implementation Approval Gate
 
-Do not start implementation until this spec, task plan, and review are explicitly approved.
+Implementation was approved, completed, reviewed, and merged in PR #1. Future voice-model work must start from a new design/spec/task phase.

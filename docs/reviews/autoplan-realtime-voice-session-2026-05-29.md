@@ -1,15 +1,17 @@
 # Autoplan Review: Realtime Voice Session MVP
 
-Status: DRAFT
+Status: COMPLETE
 Branch: `feat/voice-phase-design`
 Input design: `docs/designs/voiceagents-realtime-voice-session-mvp.md`
 Input spec: `docs/specs/voiceagents-realtime-voice-session-mvp.md`
 Task plan: `docs/specs/voiceagents-realtime-voice-session-mvp-tasks.md`
 Date: 2026-05-29
+Merged PR: https://github.com/fanly93/VoiceAgents/pull/1
+Merge commit: `ab79475`
 
 ## Summary
 
-The plan is coherent and ready for approval before implementation. It keeps the phase focused on browser/local realtime voice instead of production telephony, uses OpenAI Realtime only behind a provider boundary, and keeps business tool execution inside the VoiceAgents backend.
+The plan was approved, implemented, reviewed, and merged. The shipped phase is browser/local realtime plumbing rather than real OpenAI Realtime WebRTC audio: mock-mode sessions, backend-generated tool definitions, tool-call relay, JSONL event logging, and safe handoff states are implemented; live voice model behavior is deferred.
 
 The review found one important design gap: browser-relayed tool calls need a session-bound relay token, not only `session_id` and `call_id`. The spec and task plan were updated to return a `tool_call_token`, require it through an HTTP authorization header, reject invalid tokens, and prevent credential/token logging.
 
@@ -33,7 +35,7 @@ Scope that must stay out:
 - real PII
 - merchant sales demo polish
 
-Decision: keep Approach A for this phase; keep Approach C as a future fallback if speech-to-speech Realtime is too hard to control for deterministic support flows.
+Decision: keep Approach A as the next real voice integration direction, with Approach C as a future fallback if speech-to-speech Realtime is too hard to control for deterministic support flows.
 
 ## Engineering Review
 
@@ -103,9 +105,9 @@ Required before implementation is considered complete:
 5. Added backend-generated Realtime session instructions and tool definitions.
 6. Updated task plan to cover token creation, storage, validation, logging protection, and tool-definition generation.
 
-## Open Questions Before Implementation
+## Deferred To Next Phase
 
-These do not block spec approval, but should be resolved during implementation planning:
+These items remain open for the real voice integration design/spec phase:
 
 1. Which exact default OpenAI Realtime model and voice should be set in config defaults?
 2. Should the OpenAI provider use ephemeral client secrets first, or the newer unified WebRTC session initialization first?
@@ -114,11 +116,9 @@ These do not block spec approval, but should be resolved during implementation p
 Recommended defaults:
 
 - use mock provider for automated tests
-- default real provider model/voice from current OpenAI docs at implementation time
+- default real provider model/voice should be selected from current OpenAI docs in the next voice integration phase
 - enable JSONL only in local/dev unless explicitly configured
 
-## Approval Recommendation
+## Completion
 
-Approve the spec and task plan for implementation.
-
-Implementation should stop before any telephony work, real audio storage, real PII handling, or merchant demo UI work. Those require separate design and spec phases.
+Completed and merged in PR #1. Implementation stopped before telephony work, real OpenAI Realtime WebRTC audio, browser microphone capture, real audio storage, real PII handling, and merchant demo UI work. Those require separate design and spec phases.
