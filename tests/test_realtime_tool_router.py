@@ -4,6 +4,8 @@ from voiceagents.realtime.contracts import RealtimeToolCallRequest
 from voiceagents.realtime.session_store import InMemoryVoiceSessionStore
 from voiceagents.realtime.tool_router import (
     InvalidToolCallTokenError,
+    InvalidToolArgumentsError,
+    LookupOrderArguments,
     RealtimeToolRouter,
     UnknownRealtimeToolError,
 )
@@ -50,3 +52,45 @@ def test_tool_router_rejects_invalid_token() -> None:
 
     with pytest.raises(InvalidToolCallTokenError):
         router.validate_request(make_tool_call_request(), "wrong-token")
+
+
+def test_tool_router_validates_tool_arguments() -> None:
+    store, _token = make_store_with_session()
+    router = RealtimeToolRouter(session_store=store)
+
+    arguments = router.validate_arguments(make_tool_call_request())
+
+    assert isinstance(arguments, LookupOrderArguments)
+    assert arguments.order_id == "ORDER-REDACTED-001"
+
+
+def test_tool_router_rejects_invalid_tool_arguments() -> None:
+    store, _token = make_store_with_session()
+    router = RealtimeToolRouter(session_store=store)
+
+    with pytest.raises(InvalidToolArgumentsError):
+        router.validate_arguments(
+            RealtimeToolCallRequest(
+                session_id="session-123",
+                call_id="call-123",
+                merchant_id="merchant-123",
+                tool_name="lookup_order",
+                arguments={"order_id": ""},
+            )
+        )
+
+
+def test_tool_router_rejects_extra_tool_arguments() -> None:
+    store, _token = make_store_with_session()
+    router = RealtimeToolRouter(session_store=store)
+
+    with pytest.raises(InvalidToolArgumentsError):
+        router.validate_arguments(
+            RealtimeToolCallRequest(
+                session_id="session-123",
+                call_id="call-123",
+                merchant_id="merchant-123",
+                tool_name="lookup_order",
+                arguments={"order_id": "ORDER-REDACTED-001", "python_module": "os"},
+            )
+        )
