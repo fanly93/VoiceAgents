@@ -3,6 +3,16 @@ from voiceagents.adapters.knowledge import MockKnowledgeAdapter
 from voiceagents.agent.models import CallFlowInput
 from voiceagents.agent.service import CallFlowService
 from voiceagents.contracts.common import HandoffReason
+from voiceagents.contracts.handoff import HandoffRequest
+
+
+class RecordingHandoffAdapter(MockHandoffAdapter):
+    def __init__(self) -> None:
+        self.last_request: HandoffRequest | None = None
+
+    def handoff(self, request: HandoffRequest):
+        self.last_request = request
+        return super().handoff(request)
 
 
 def test_known_product_question_is_resolved() -> None:
@@ -33,8 +43,9 @@ def test_known_product_question_is_resolved() -> None:
 
 
 def test_unknown_product_question_hands_off() -> None:
+    handoff_adapter = RecordingHandoffAdapter()
     service = CallFlowService(
-        handoff_adapter=MockHandoffAdapter(),
+        handoff_adapter=handoff_adapter,
         knowledge_adapter=MockKnowledgeAdapter(),
     )
 
@@ -56,4 +67,6 @@ def test_unknown_product_question_hands_off() -> None:
     assert output.handoff_required is True
     assert output.handoff_reason == HandoffReason.RAG_LOW_CONFIDENCE
     assert output.handoff_id == "HANDOFF-REDACTED"
-
+    assert output.tools_called == ["query_product_knowledge", "handoff_to_human"]
+    assert handoff_adapter.last_request is not None
+    assert handoff_adapter.last_request.tools_called == ["query_product_knowledge"]

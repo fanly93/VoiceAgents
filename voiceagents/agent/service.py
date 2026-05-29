@@ -48,7 +48,7 @@ class CallFlowService:
                     handoff_reason=HandoffReason.NONE,
                     handoff_id=None,
                 )
-            return self._handoff(call, HandoffReason.TOOL_ERROR, response.user_summary)
+            return self._handoff(call, HandoffReason.TOOL_ERROR, response.user_summary, ["lookup_order"])
 
         if call.intent == "logistics_tracking":
             if not call.order_id_confirmed or not call.order_id_candidate:
@@ -65,7 +65,7 @@ class CallFlowService:
                     handoff_reason=HandoffReason.NONE,
                     handoff_id=None,
                 )
-            return self._handoff(call, HandoffReason.TOOL_ERROR, response.user_summary)
+            return self._handoff(call, HandoffReason.TOOL_ERROR, response.user_summary, ["lookup_logistics"])
 
         if call.intent == "product_usage":
             response = self._knowledge_adapter.query(
@@ -80,11 +80,18 @@ class CallFlowService:
                     handoff_reason=HandoffReason.NONE,
                     handoff_id=None,
                 )
-            return self._handoff(call, HandoffReason.RAG_LOW_CONFIDENCE, response.short_answer)
+            return self._handoff(call, HandoffReason.RAG_LOW_CONFIDENCE, response.short_answer, ["query_product_knowledge"])
 
         return self._handoff(call, HandoffReason.UNSUPPORTED_INTENT, "Intent is not supported yet.")
 
-    def _handoff(self, call: CallFlowInput, reason: HandoffReason, summary: str) -> CallFlowOutput:
+    def _handoff(
+        self,
+        call: CallFlowInput,
+        reason: HandoffReason,
+        summary: str,
+        prior_tools_called: list[str] | None = None,
+    ) -> CallFlowOutput:
+        prior_tools_called = prior_tools_called or []
         response = self._handoff_adapter.handoff(
             HandoffRequest(
                 call_id=call.call_id,
@@ -92,7 +99,7 @@ class CallFlowService:
                 intent_primary=call.intent,
                 order_id_candidate=call.order_id_candidate,
                 summary=summary,
-                tools_called=[],
+                tools_called=prior_tools_called,
                 handoff_reason=reason,
                 recommended_next_step="Review the call context and continue with the customer.",
             )
@@ -100,7 +107,7 @@ class CallFlowService:
         return CallFlowOutput(
             resolved=False,
             response_text="I will transfer you to a human agent.",
-            tools_called=["handoff_to_human"],
+            tools_called=[*prior_tools_called, "handoff_to_human"],
             handoff_required=True,
             handoff_reason=reason,
             handoff_id=response.handoff_id,
