@@ -11,7 +11,7 @@ Date: 2026-05-29
 
 The plan is coherent and ready for approval before implementation. It keeps the phase focused on browser/local realtime voice instead of production telephony, uses OpenAI Realtime only behind a provider boundary, and keeps business tool execution inside the VoiceAgents backend.
 
-The review found one important design gap: browser-relayed tool calls need a session-bound relay token, not only `session_id` and `call_id`. The spec and task plan were updated to add `tool_call_token`, reject invalid tokens, and prevent credential/token logging.
+The review found one important design gap: browser-relayed tool calls need a session-bound relay token, not only `session_id` and `call_id`. The spec and task plan were updated to return a `tool_call_token`, require it through an HTTP authorization header, reject invalid tokens, and prevent credential/token logging.
 
 ## CEO Review
 
@@ -44,7 +44,8 @@ Required boundaries:
 - `RealtimeProvider` only creates provider connection data; it must not execute business tools.
 - `/v1/realtime/tool-call` must be the only backend execution path for Realtime function calls.
 - tool execution must use allowlisted tool names and Pydantic argument schemas.
-- `tool_call_token` must be session-bound and required for tool-call relay.
+- `tool_call_token` must be session-bound, short-lived, hash-stored, sent through an HTTP authorization header, and required for tool-call relay.
+- Realtime tool definitions and instructions must be generated from backend schemas and allowlists.
 - `client_secret` and `tool_call_token` must never be written to JSONL logs.
 - event logging must run redaction before persistence.
 - business logic must depend on session/event repository interfaces, not JSONL or in-memory details.
@@ -53,9 +54,9 @@ Engineering risk table:
 
 | Risk | Impact | Required mitigation |
 | --- | --- | --- |
-| Browser forges tool calls | Unauthorized tool execution | session-bound `tool_call_token`, tool allowlist, schema validation |
+| Browser forges tool calls | Unauthorized tool execution | session-bound header `tool_call_token`, tool allowlist, schema validation |
 | Provider credential leaks | OpenAI account exposure | standard API key server-only, never log client secret |
-| Logs capture PII | Compliance and customer trust risk | redaction hook, no audio, synthetic/redacted fixtures only |
+| Logs capture PII or credentials | Compliance and customer trust risk | redaction hook, no audio, no credentials/tokens, synthetic/redacted fixtures only, gitignored local logs |
 | Realtime provider coupling | hard to switch architecture later | provider/session interfaces before OpenAI-specific code |
 | Voice UX hides business bugs | hard debugging | text response mode and visible event/tool panels |
 
@@ -96,10 +97,11 @@ Required before implementation is considered complete:
 ## Plan Adjustments Applied
 
 1. Added `tool_call_token` to `RealtimeClientSecretResponse`.
-2. Added `tool_call_token` to `RealtimeToolCallRequest`.
-3. Required `/v1/realtime/tool-call` to reject invalid tokens with HTTP 403.
+2. Required `/v1/realtime/tool-call` to receive `tool_call_token` through an HTTP authorization header, not the JSON body.
+3. Required `/v1/realtime/tool-call` to reject missing, invalid, and expired tokens with HTTP 401 or 403.
 4. Required credential and token values to be excluded from JSONL event logs.
-5. Updated task plan to cover token creation, storage, validation, and logging protection.
+5. Added backend-generated Realtime session instructions and tool definitions.
+6. Updated task plan to cover token creation, storage, validation, logging protection, and tool-definition generation.
 
 ## Open Questions Before Implementation
 

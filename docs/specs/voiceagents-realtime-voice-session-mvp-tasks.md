@@ -8,6 +8,7 @@ Rules:
 - Do not implement production telephony.
 - Do not store raw audio.
 - Do not commit real PII.
+- Do not commit `.voiceagents/` local event logs.
 - Each task is intended to be separately commit-able.
 - Each task has explicit inputs and outputs.
 - Each task should include or preserve focused tests.
@@ -79,6 +80,7 @@ Required outputs:
 - `RealtimeClientSecretRequest`
 - `RealtimeClientSecretResponse`
 - response includes `tool_call_token`
+- response includes `session_config`
 
 Validation:
 
@@ -105,7 +107,8 @@ Required outputs:
 
 - `RealtimeToolCallRequest`
 - `RealtimeToolCallResponse`
-- request includes `tool_call_token`
+- request does not include `tool_call_token` in the JSON body
+- API layer will read `tool_call_token` from an HTTP authorization header
 
 Validation:
 
@@ -113,7 +116,34 @@ Validation:
 python3 -m pytest tests/test_realtime_contracts.py
 ```
 
-### Task 1.5: Add Voice Event Contract
+### Task 1.5: Add Realtime Session Config Contracts
+
+Purpose: make backend-generated Realtime instructions and tool definitions the source of truth.
+
+Inputs:
+
+- allowed Realtime tool list from source spec
+- per-tool argument schema requirements
+- unclear speech and handoff policy from source spec
+
+Outputs:
+
+- Updated `voiceagents/realtime/contracts.py`
+- Updated `tests/test_realtime_contracts.py`
+
+Required outputs:
+
+- `RealtimeSessionConfig`
+- `RealtimeToolDefinition`
+- tests that tools are serializable and contain only allowlisted tool names
+
+Validation:
+
+```bash
+python3 -m pytest tests/test_realtime_contracts.py
+```
+
+### Task 1.6: Add Voice Event Contract
 
 Purpose: define the structured event log payload.
 
@@ -136,7 +166,7 @@ Validation:
 python3 -m pytest tests/test_realtime_contracts.py
 ```
 
-### Task 1.6: Add Provider Protocol And Mock Provider
+### Task 1.7: Add Provider Protocol And Mock Provider
 
 Purpose: keep provider-specific session creation outside business logic.
 
@@ -228,7 +258,12 @@ Outputs:
 Required behavior:
 
 - create session
-- create and store session-bound `tool_call_token`
+- create session-bound `tool_call_token` with `secrets.token_urlsafe(32)` or stronger entropy
+- store only a token hash; do not retain plaintext token after returning it once
+- record token expiry at or before provider credential expiry
+- use a default token TTL of 10 minutes when provider expiry is unavailable
+- validate token with constant-time comparison
+- reject expired tokens
 - get session
 - update state
 - append transcript
@@ -287,6 +322,8 @@ Required behavior:
 - append one JSON object per line
 - reject or omit raw audio fields
 - write redacted text only
+- omit provider credentials and tool-call relay tokens
+- default `.voiceagents/` path is ignored by git
 
 Validation:
 
@@ -305,6 +342,7 @@ Purpose: reject unknown Realtime function calls before any business logic runs.
 Inputs:
 
 - allowed tool list from source spec
+- session store token verifier
 
 Outputs:
 
@@ -314,7 +352,8 @@ Outputs:
 Required behavior:
 
 - unknown `tool_name` raises a typed error or returns a rejected response
-- invalid `tool_call_token` raises a typed error or returns a rejected response
+- invalid, expired, or missing `tool_call_token` raises a typed error or returns a rejected response
+- tool definitions can be generated from the same allowlist
 
 Validation:
 
@@ -414,6 +453,9 @@ Required behavior:
 - mock provider returns deterministic fake credential
 - response does not include standard API key
 - response includes session-bound `tool_call_token`
+- response includes backend-generated `session_config.instructions`
+- response includes backend-generated `session_config.tools`
+- generated tools match the backend allowlist and argument schemas
 - event log does not write provider credential or `tool_call_token`
 - session is created
 
@@ -430,6 +472,7 @@ Purpose: expose the unified backend tool execution endpoint.
 Inputs:
 
 - `RealtimeToolCallRequest`
+- HTTP authorization header with `tool_call_token`
 - `RealtimeToolRouter`
 - session store
 - event repository
@@ -442,7 +485,9 @@ Outputs:
 Required behavior:
 
 - successful tool call returns HTTP 200
+- missing or malformed authorization header returns HTTP 401 or 403
 - invalid `tool_call_token` returns HTTP 403
+- expired `tool_call_token` returns HTTP 403
 - unknown tool returns HTTP 400
 - invalid arguments return HTTP 422
 - handoff tool updates session state
@@ -521,7 +566,9 @@ Outputs:
 Required behavior:
 
 - JS references `/v1/realtime/client-secret`
+- JS reads `session_config.instructions` and `session_config.tools` from the response
 - no standard OpenAI API key appears in static assets
+- `client_secret` and `tool_call_token` are not rendered into visible event panels
 
 Validation:
 
@@ -546,6 +593,8 @@ Outputs:
 Required behavior:
 
 - JS references `/v1/realtime/tool-call`
+- JS sends `tool_call_token` only through an HTTP authorization header
+- JS uses backend-returned tool definitions when configuring the Realtime session
 - UI has a tool-call list region
 
 Validation:
@@ -578,6 +627,8 @@ Required content:
 - OpenAI provider mode
 - browser test page URL
 - no telephony/no audio storage warning
+- `.voiceagents/` event logs are local-only and gitignored
+- tool-call relay tokens are short-lived session credentials and must not be logged
 
 Validation:
 
@@ -601,8 +652,9 @@ Outputs:
 Required behavior:
 
 - call `/v1/realtime/client-secret`
-- call `/v1/realtime/tool-call` for order/logistics/product/handoff
+- call `/v1/realtime/tool-call` for order/logistics/product/handoff using authorization header token
 - fail on unknown tool if it does not reject
+- fail if a tool call without authorization is accepted
 
 Validation:
 

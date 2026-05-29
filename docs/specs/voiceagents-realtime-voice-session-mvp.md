@@ -32,6 +32,7 @@ The first version uses a minimal browser test page:
 - Connect to OpenAI Realtime over WebRTC using backend-minted ephemeral credentials.
 - Support text and voice response modes.
 - Display transcript, assistant response text, session state, tool calls, handoff state, latency, and provider events.
+- Use backend-generated Realtime session instructions and tool definitions.
 
 Supported call paths:
 
@@ -157,24 +158,60 @@ Fields:
 - `expires_at: str | None`
 - `model: str`
 - `voice: str | None`
+- `session_config: RealtimeSessionConfig`
 
 Rules:
 
 - never return a standard OpenAI API key
 - never write `client_secret` or `tool_call_token` to event logs
 - `tool_call_token` is a VoiceAgents session-bound relay token, not an OpenAI credential
+- `tool_call_token` must be generated with `secrets.token_urlsafe(32)` or stronger entropy
+- `tool_call_token` must expire no later than the provider credential and must be invalid after session end
+- when provider expiry is unavailable, `tool_call_token` must expire within 10 minutes by default
+- server-side session state must store only a token hash; the plaintext token is returned once in the client-secret response and never retained
+- token validation must use constant-time comparison, such as `hmac.compare_digest`
 - mock provider may return deterministic fake credentials
+
+### Realtime Session Config
+
+`RealtimeSessionConfig`
+
+Fields:
+
+- `instructions: str`
+- `tools: list[RealtimeToolDefinition]`
+
+`RealtimeToolDefinition`
+
+Fields:
+
+- `name: str`
+- `description: str`
+- `parameters_schema: dict[str, Any]`
+
+Rules:
+
+- generated server-side from the backend tool allowlist and Pydantic schemas
+- browser code must not hardcode a divergent tool schema
+- tool definitions must include only the allowed tools listed in this spec
+- instructions must tell the model to ask one clarification question when speech, order ID, or intent is unclear
+- if the clarification still fails, the model must call `handoff_to_human` with `low_asr_confidence` or `order_id_unconfirmed`
+- instructions must tell the model not to approve refunds, returns, or compensation outside backend tool results or handoff policy
 
 ### Tool Call Request
 
 `RealtimeToolCallRequest`
+
+HTTP authorization:
+
+- required header: `Authorization: Bearer <tool_call_token>`
+- do not accept `tool_call_token` in the JSON request body
 
 Fields:
 
 - `session_id: str`
 - `call_id: str`
 - `merchant_id: str`
-- `tool_call_token: str`
 - `tool_name: str`
 - `arguments: dict[str, Any]`
 
@@ -188,9 +225,10 @@ Allowed tools:
 Rules:
 
 - reject unknown tool names
-- reject requests whose `tool_call_token` does not match the session
+- reject requests whose authorization header is missing, malformed, expired, or does not match the session
 - validate arguments using a per-tool Pydantic schema
 - do not allow callers to name Python modules, classes, import paths, files, shell commands, or arbitrary functions
+- never write authorization header values to event logs
 
 ### Tool Call Response
 
@@ -286,6 +324,7 @@ Do not let the model freely decide return/refund approval.
 
 - `create_session(...)`
 - `get_session(session_id)`
+- `verify_tool_call_token(session_id, token)`
 - `update_state(session_id, state)`
 - `append_transcript(session_id, role, text)`
 - `append_tool_call(session_id, tool_name, safe_summary)`
@@ -322,6 +361,7 @@ Rules:
 - run redaction before writing
 - never write raw audio
 - never write provider client secrets or tool-call relay tokens
+- the default `.voiceagents/` log path must stay ignored by git
 
 ## Redaction
 
@@ -351,8 +391,10 @@ Test requirements:
 - mock provider returns deterministic credentials
 - openai provider fails clearly when `OPENAI_API_KEY` is missing
 - response never includes a standard API key
+- response includes backend-generated session instructions and tool definitions
 - session is created in session store
 - event log records session creation
+- event log does not contain provider credentials or `tool_call_token`
 
 ### `POST /v1/realtime/tool-call`
 
@@ -363,8 +405,11 @@ Test requirements:
 - known tools return expected structured response
 - unknown tools return 400
 - invalid arguments return 422
+- missing or malformed authorization header returns 401 or 403
+- wrong or expired `tool_call_token` returns 403
 - handoff tool sets session state to `handoff_pending`
 - event log records redacted tool arguments and safe result summary
+- event log does not contain authorization header values or `tool_call_token`
 
 ## Browser Test Page
 
@@ -394,7 +439,10 @@ Visible panels:
 Hard rule:
 
 - browser fetches ephemeral credentials from the backend
+- browser uses backend-returned `session_config.tools` and `session_config.instructions`
+- browser sends the tool-call relay token only in the HTTP authorization header
 - browser never embeds or displays `OPENAI_API_KEY`
+- browser never writes `client_secret` or `tool_call_token` into visible event panels
 
 ## Testing Strategy
 
@@ -403,6 +451,7 @@ Unit tests:
 - contracts
 - provider interface and mock provider
 - openai provider missing-key error
+- session config/tool definition generation from backend schemas
 - redaction rules
 - session store
 - JSONL event repository
@@ -418,12 +467,14 @@ Smoke tests:
 
 - mock realtime client-secret flow
 - mock tool-call flow for order/logistics/product/handoff
+- missing/wrong/expired tool-call token rejection
 
 Manual verification:
 
 - with real OpenAI credentials, browser can start a Realtime session
 - function calls can be relayed through backend and returned to Realtime
 - handoff path enters `handoff_pending`
+- unclear speech or unconfirmed order ID causes one clarification attempt, then handoff if still unresolved
 
 ## Acceptance Criteria
 
@@ -435,7 +486,11 @@ The phase is complete when:
 - OpenAI provider path fails safely without `OPENAI_API_KEY`
 - browser test page is available locally
 - tool-call endpoint executes only allowlisted tools
-- event log contains redacted structured events and no raw audio
+- tool-call endpoint requires a valid session-bound authorization header
+- Realtime tool definitions are generated from backend allowlist and schemas
+- unclear speech and unconfirmed order IDs have a documented clarification-then-handoff policy
+- event log contains redacted structured events and no raw audio, provider credentials, relay tokens, or unredacted PII
+- default local event-log path is ignored by git
 - documentation explains setup, env vars, mock mode, and real OpenAI mode
 
 ## Deferred

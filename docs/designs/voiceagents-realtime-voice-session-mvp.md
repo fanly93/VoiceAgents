@@ -7,13 +7,14 @@ Source: `.gstack/projects/fanly93-VoiceAgents/feat-voice-phase-design-design-202
 
 This phase designs a browser/local realtime voice MVP for VoiceAgents. It proves that live speech can drive existing business tools and enter safe handoff states without implementing production telephony.
 
-Chosen approach: browser connects directly to OpenAI Realtime over WebRTC using backend-minted ephemeral credentials. The browser relays Realtime function calls to the VoiceAgents backend through `POST /v1/realtime/tool-call`; the backend validates and executes approved tools.
+Chosen approach: browser connects directly to OpenAI Realtime over WebRTC using backend-minted ephemeral credentials. The browser receives backend-generated Realtime session instructions and tool definitions, then relays Realtime function calls to the VoiceAgents backend through `POST /v1/realtime/tool-call`; the backend validates and executes approved tools.
 
 ## In Scope
 
 - Minimal browser realtime voice test page.
 - OpenAI Realtime as first provider behind a provider abstraction.
 - Backend endpoint for ephemeral Realtime client credentials.
+- Backend-generated Realtime session instructions and tool definitions.
 - Unified backend tool-call endpoint: `POST /v1/realtime/tool-call`.
 - Tool paths for order lookup, logistics lookup, product knowledge, and handoff.
 - In-memory session store.
@@ -62,7 +63,9 @@ VoiceAgents backend
 
 Creates a provider-specific ephemeral credential for browser Realtime sessions. Standard OpenAI API keys stay server-side.
 
-The response also returns a session-bound `tool_call_token` for `/v1/realtime/tool-call`. This token is not an OpenAI credential; it only authorizes tool-call relay for the created VoiceAgents session.
+The response also returns backend-generated Realtime session instructions, tool definitions, and a session-bound `tool_call_token` for `/v1/realtime/tool-call`. This token is not an OpenAI credential; it only authorizes tool-call relay for the created VoiceAgents session.
+
+The browser must send `tool_call_token` as an HTTP authorization header when relaying tool calls. It must not include the token inside the JSON request body.
 
 ### `POST /v1/realtime/tool-call`
 
@@ -71,7 +74,7 @@ Executes an approved Realtime function call.
 Required protections:
 
 - tool allowlist
-- session-bound `tool_call_token`
+- session-bound `tool_call_token` from HTTP authorization header
 - per-tool Pydantic argument schema
 - merchant/session/call validation
 - safe result fields only
@@ -111,7 +114,7 @@ Business logic must depend on repository interfaces, not JSONL or in-memory deta
 
 Save structured events and redacted text transcript only.
 
-Never save raw audio. Never commit real phone numbers, names, addresses, real order IDs, or unredacted PII.
+Never save raw audio. Never commit real phone numbers, names, addresses, real order IDs, unredacted PII, provider credentials, or tool-call relay tokens. The default local event-log directory must be gitignored.
 
 Event fields should include session/call identifiers, state, event type, redacted transcript, redacted response, tool name, safe tool summary, handoff reason, latency, provider metadata, and whether redaction was applied.
 
@@ -135,11 +138,14 @@ Hard gates:
 
 - Browser never exposes standard OpenAI API key.
 - Realtime credentials are minted by backend.
+- Realtime tool definitions and instructions come from the backend allowlist, not browser hardcoding.
 - Order/logistics/product consultation paths call the correct backend tool.
 - Refund, complaint, low confidence, and user-requested-human paths enter `handoff_pending`.
+- Unclear speech or unconfirmed order identifiers trigger one clarification attempt before handoff.
 - Unknown tools are rejected.
 - Tool arguments are schema-validated.
 - JSONL logs do not contain audio.
+- JSONL logs do not contain provider credentials, relay tokens, or unredacted PII.
 - Basic redaction runs before transcript/event persistence.
 
 Measured but not first-phase blockers:
