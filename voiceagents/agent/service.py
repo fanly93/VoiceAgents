@@ -20,6 +20,19 @@ class CallFlowService:
         if call.asr_confidence < LOW_ASR_CONFIDENCE_THRESHOLD:
             return self._handoff(call, HandoffReason.LOW_ASR_CONFIDENCE, "ASR confidence is too low.")
 
+        if call.customer_requested_human:
+            return self._handoff(call, HandoffReason.CUSTOMER_REQUESTS_HUMAN, "Customer requested a human agent.")
+
+        if call.intent == "complaint":
+            return self._handoff(call, HandoffReason.COMPLAINT_OR_ANGRY_CUSTOMER, "Customer has a complaint.")
+
+        if call.intent == "return_exchange_refund":
+            return self._handoff(
+                call,
+                HandoffReason.REFUND_OR_RETURN_EXCEPTION,
+                "Return, exchange, and refund requests require human review in the MVP.",
+            )
+
         if call.intent == "order_status":
             if not call.order_id_confirmed or not call.order_id_candidate:
                 return self._handoff(call, HandoffReason.ORDER_ID_UNCONFIRMED, "Order ID is not confirmed.")
