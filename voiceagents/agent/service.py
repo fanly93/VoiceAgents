@@ -1,18 +1,37 @@
 from voiceagents.agent.models import CallFlowInput, CallFlowOutput
 from voiceagents.contracts.common import HandoffReason
 from voiceagents.contracts.handoff import HandoffRequest
+from voiceagents.contracts.order import LookupOrderRequest
 
 
 LOW_ASR_CONFIDENCE_THRESHOLD = 0.6
 
 
 class CallFlowService:
-    def __init__(self, handoff_adapter) -> None:
+    def __init__(self, handoff_adapter, order_adapter=None) -> None:
         self._handoff_adapter = handoff_adapter
+        self._order_adapter = order_adapter
 
     def handle(self, call: CallFlowInput) -> CallFlowOutput:
         if call.asr_confidence < LOW_ASR_CONFIDENCE_THRESHOLD:
             return self._handoff(call, HandoffReason.LOW_ASR_CONFIDENCE, "ASR confidence is too low.")
+
+        if call.intent == "order_status":
+            if not call.order_id_confirmed or not call.order_id_candidate:
+                return self._handoff(call, HandoffReason.ORDER_ID_UNCONFIRMED, "Order ID is not confirmed.")
+            response = self._order_adapter.lookup_order(
+                LookupOrderRequest(merchant_id=call.merchant_id, order_id=call.order_id_candidate)
+            )
+            if response.ok:
+                return CallFlowOutput(
+                    resolved=True,
+                    response_text=response.user_summary,
+                    tools_called=["lookup_order"],
+                    handoff_required=False,
+                    handoff_reason=HandoffReason.NONE,
+                    handoff_id=None,
+                )
+            return self._handoff(call, HandoffReason.TOOL_ERROR, response.user_summary)
 
         return self._handoff(call, HandoffReason.UNSUPPORTED_INTENT, "Intent is not supported yet.")
 
@@ -37,4 +56,3 @@ class CallFlowService:
             handoff_reason=reason,
             handoff_id=response.handoff_id,
         )
-
