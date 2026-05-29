@@ -79,11 +79,6 @@ def create_app(
     def create_realtime_client_secret(
         request: RealtimeClientSecretRequest,
     ) -> RealtimeClientSecretResponse:
-        created_session = session_store.create_session(
-            session_id=request.session_id,
-            call_id=request.call_id,
-            merchant_id=request.merchant_id,
-        )
         provider_name = _current_realtime_provider_name()
         provider = _build_realtime_provider(provider_name)
         try:
@@ -91,6 +86,12 @@ def create_app(
         except RealtimeProviderError as error:
             raise HTTPException(status_code=503, detail=str(error)) from error
 
+        created_session = session_store.create_session(
+            session_id=request.session_id,
+            call_id=request.call_id,
+            merchant_id=request.merchant_id,
+            token_expires_at=_parse_provider_expiry(provider_response.expires_at),
+        )
         response = provider_response.model_copy(
             update={"tool_call_token": created_session.tool_call_token}
         )
@@ -196,3 +197,13 @@ def _extract_bearer_token(authorization: str | None) -> str:
     if scheme.lower() != "bearer" or not token:
         raise HTTPException(status_code=401, detail="Malformed Authorization header")
     return token
+
+
+def _parse_provider_expiry(expires_at: str | None) -> datetime | None:
+    if expires_at is None:
+        return None
+    normalized = expires_at.replace("Z", "+00:00")
+    try:
+        return datetime.fromisoformat(normalized)
+    except ValueError:
+        return None

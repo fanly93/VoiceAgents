@@ -1,8 +1,9 @@
 from fastapi.testclient import TestClient
+import pytest
 
 from voiceagents.api.app import create_app
 from voiceagents.realtime.event_log import InMemoryVoiceEventRepository
-from voiceagents.realtime.session_store import InMemoryVoiceSessionStore
+from voiceagents.realtime.session_store import InMemoryVoiceSessionStore, VoiceSessionNotFound
 
 
 def test_realtime_client_secret_endpoint_returns_mock_credentials(monkeypatch) -> None:
@@ -47,7 +48,8 @@ def test_realtime_client_secret_endpoint_returns_mock_credentials(monkeypatch) -
 def test_realtime_client_secret_endpoint_rejects_missing_openai_key(monkeypatch) -> None:
     monkeypatch.setenv("VOICEAGENTS_REALTIME_PROVIDER", "openai_realtime")
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    client = TestClient(create_app())
+    store = InMemoryVoiceSessionStore()
+    client = TestClient(create_app(realtime_session_store=store))
 
     response = client.post(
         "/v1/realtime/client-secret",
@@ -62,6 +64,8 @@ def test_realtime_client_secret_endpoint_rejects_missing_openai_key(monkeypatch)
 
     assert response.status_code == 503
     assert "OPENAI_API_KEY" in response.json()["detail"]
+    with pytest.raises(VoiceSessionNotFound):
+        store.get_session("session-123")
 
 
 def test_realtime_client_secret_endpoint_rejects_raw_safety_subject_id(monkeypatch) -> None:
