@@ -1,6 +1,8 @@
 import pytest
 
 from voiceagents.adapters.logistics import MockLogisticsAdapter
+from voiceagents.adapters.handoff import MockHandoffAdapter
+from voiceagents.adapters.knowledge import MockKnowledgeAdapter
 from voiceagents.adapters.order import MockOrderAdapter
 from voiceagents.contracts.common import HandoffReason
 from voiceagents.realtime.contracts import RealtimeToolCallRequest
@@ -39,6 +41,8 @@ def make_router_with_adapters(store: InMemoryVoiceSessionStore) -> RealtimeToolR
         session_store=store,
         order_adapter=MockOrderAdapter(),
         logistics_adapter=MockLogisticsAdapter(),
+        knowledge_adapter=MockKnowledgeAdapter(),
+        handoff_adapter=MockHandoffAdapter(),
     )
 
 
@@ -141,3 +145,50 @@ def test_tool_router_routes_logistics_lookup() -> None:
     assert response.result["status"] == "in_transit"
     assert response.handoff_required is False
     assert response.handoff_reason is HandoffReason.NONE
+
+
+def test_tool_router_routes_product_knowledge() -> None:
+    store, token = make_store_with_session()
+    router = make_router_with_adapters(store)
+
+    response = router.execute(
+        RealtimeToolCallRequest(
+            session_id="session-123",
+            call_id="call-123",
+            merchant_id="merchant-123",
+            tool_name="query_product_knowledge",
+            arguments={"query": "How should I wash this wig?", "locale": "en-US"},
+        ),
+        tool_call_token=token,
+    )
+
+    assert response.ok is True
+    assert response.tool_name == "query_product_knowledge"
+    assert "cool water" in response.safe_summary
+    assert response.handoff_required is False
+    assert response.handoff_reason is HandoffReason.NONE
+
+
+def test_tool_router_routes_handoff_to_human_and_marks_session() -> None:
+    store, token = make_store_with_session()
+    router = make_router_with_adapters(store)
+
+    response = router.execute(
+        RealtimeToolCallRequest(
+            session_id="session-123",
+            call_id="call-123",
+            merchant_id="merchant-123",
+            tool_name="handoff_to_human",
+            arguments={
+                "reason": "customer_requests_human",
+                "summary": "Customer asked to speak with a person.",
+            },
+        ),
+        tool_call_token=token,
+    )
+
+    assert response.ok is True
+    assert response.handoff_required is True
+    assert response.handoff_reason is HandoffReason.CUSTOMER_REQUESTS_HUMAN
+    assert response.result["handoff_id"] == "HANDOFF-REDACTED"
+    assert store.get_session("session-123").handoff_reason is HandoffReason.CUSTOMER_REQUESTS_HUMAN
