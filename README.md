@@ -12,6 +12,17 @@ Real pilot call recordings are not available yet, so real-call evaluation is def
 - Define tool contracts for order lookup, logistics lookup, product knowledge retrieval, and human handoff.
 - Define handoff and failure rules for the MVP.
 - Validate call evaluation data before it is used as an acceptance baseline.
+- Run local HTTP end-to-end examples against the backend skeleton.
+
+## Out of Scope for the Current Phase
+
+- Voice-model integration.
+- OpenAI, ASR, TTS, or realtime voice provider dependencies.
+- Telephony provider integration.
+- Phone-number provisioning or inbound/outbound calling.
+- Audio file input, audio file output, or recording processing.
+- Production merchant API integration.
+- Real customer data, raw recordings, or PII.
 
 ## Quick Start
 
@@ -57,6 +68,30 @@ curl -X POST http://127.0.0.1:8000/v1/calls/simulate \
     "customer_requested_human": false
   }'
 ```
+
+Run the local HTTP smoke test against a running server:
+
+```bash
+python3 scripts/smoke_api.py --base-url http://127.0.0.1:8000
+```
+
+The smoke script calls `/health`, then submits every JSON payload in `examples/call-simulations/` to `/v1/calls/simulate`.
+
+Validate example payload compatibility without starting a server:
+
+```bash
+python3 -m pytest tests/test_example_call_payloads.py
+```
+
+## Local Call Simulation Examples
+
+Reusable request payloads live in `examples/call-simulations/`:
+
+- `product-usage.json`
+- `order-status.json`
+- `logistics-tracking.json`
+- `customer-requests-human.json`
+- `low-asr-confidence.json`
 
 Real call audio, customer names, phone numbers, order numbers, and other PII must not be committed to this repository. When real recordings become available, store only safe references and redacted annotations.
 
