@@ -1,0 +1,10 @@
+[project]
+name = "voiceagents"
+version = "0.1.0"
+description = "Phase 0 evaluation assets for the VoiceAgents phone-channel MVP."
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+

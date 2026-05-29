@@ -1,0 +1,13 @@
+.DS_Store
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Local project-scoped tool/runtime state.
+.bun/
+.gstack/
+.gstack-home/
+
+# Repo-local gstack install generated for this working copy.
+.agents/skills/gstack/
+.agents/skills/gstack-*

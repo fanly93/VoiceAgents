@@ -1,0 +1,65 @@
+{
+  "calls": [
+    {
+      "call_id": "sample-001",
+      "audio_file_ref": "secure-audio-store://redacted/sample-001",
+      "language": "en",
+      "market": "Europe",
+      "customer_segment": "older_wig_customer",
+      "intent_primary": "logistics_tracking",
+      "intent_secondary": "order_status",
+      "requires_order_id": true,
+      "order_id_spoken": true,
+      "order_id_transcript": "ORDER-REDACTED-001",
+      "order_id_confidence": 0.82,
+      "tool_required": "multiple",
+      "rag_answer_required": false,
+      "should_handoff": false,
+      "handoff_reason": "none",
+      "human_agent_resolution": "Human agent checked order and logistics status, then told the customer the package was in transit.",
+      "expected_voice_response_summary": "Confirm order number, check logistics, then provide a short delivery status answer.",
+      "privacy_notes": "Synthetic example. No real customer data."
+    },
+    {
+      "call_id": "sample-002",
+      "audio_file_ref": "secure-audio-store://redacted/sample-002",
+      "language": "en",
+      "market": "Europe",
+      "customer_segment": "older_wig_customer",
+      "intent_primary": "product_usage",
+      "intent_secondary": "other",
+      "requires_order_id": false,
+      "order_id_spoken": false,
+      "order_id_transcript": "none",
+      "order_id_confidence": 0,
+      "tool_required": "query_product_knowledge",
+      "rag_answer_required": true,
+      "should_handoff": false,
+      "handoff_reason": "none",
+      "human_agent_resolution": "Human agent explained wig washing and drying care steps.",
+      "expected_voice_response_summary": "Give a brief wig care answer and ask whether the customer wants instructions repeated.",
+      "privacy_notes": "Synthetic example. No real customer data."
+    },
+    {
+      "call_id": "sample-003",
+      "audio_file_ref": "secure-audio-store://redacted/sample-003",
+      "language": "en",
+      "market": "Europe",
+      "customer_segment": "older_wig_customer",
+      "intent_primary": "return_exchange_refund",
+      "intent_secondary": "complaint",
+      "requires_order_id": true,
+      "order_id_spoken": true,
+      "order_id_transcript": "ORDER-REDACTED-003",
+      "order_id_confidence": 0.57,
+      "tool_required": "handoff_to_human",
+      "rag_answer_required": false,
+      "should_handoff": true,
+      "handoff_reason": "refund_or_return_exception",
+      "human_agent_resolution": "Human agent reviewed the return exception and asked for photos before approving the next step.",
+      "expected_voice_response_summary": "Acknowledge the issue, avoid deciding the refund, and transfer with context.",
+      "privacy_notes": "Synthetic example. No real customer data."
+    }
+  ]
+}
+
