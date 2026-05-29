@@ -15,9 +15,47 @@ Real pilot call recordings are not available yet, so real-call evaluation is def
 
 ## Quick Start
 
+Install dependencies in your preferred Python environment:
+
+```bash
+python3 -m pip install -e .
+```
+
+Run tests and sample evaluation validation:
+
 ```bash
 python3 -m pytest
 python3 scripts/validate_call_evaluations.py data/call-evaluations/sample.json
+```
+
+Run the local backend skeleton:
+
+```bash
+uvicorn voiceagents.api.main:app --reload
+```
+
+Check health:
+
+```bash
+curl http://127.0.0.1:8000/health
+```
+
+Simulate a product-support call:
+
+```bash
+curl -X POST http://127.0.0.1:8000/v1/calls/simulate \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "call_id": "CALL-REDACTED",
+    "merchant_id": "merchant_demo",
+    "locale": "en-GB",
+    "intent": "product_usage",
+    "utterance": "How should I wash my wig?",
+    "order_id_candidate": null,
+    "order_id_confirmed": false,
+    "asr_confidence": 0.91,
+    "customer_requested_human": false
+  }'
 ```
 
 Real call audio, customer names, phone numbers, order numbers, and other PII must not be committed to this repository. When real recordings become available, store only safe references and redacted annotations.
