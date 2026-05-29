@@ -1156,6 +1156,148 @@ Only run this commit if review produces code or doc changes.
 
 ---
 
+## Phase 7: Local E2E Examples and Smoke Runner
+
+Purpose: make the implemented backend skeleton easy to run locally and verify through representative end-to-end HTTP calls before any voice-model phase begins.
+
+### Phase 7 In Scope
+
+- Add reusable JSON request examples for `POST /v1/calls/simulate`.
+- Add a local smoke script that calls `/health` and `/v1/calls/simulate`.
+- Document how to start the API and run the examples.
+- Add tests that keep example payloads compatible with `CallFlowInput` and the current API schema.
+
+### Phase 7 Out of Scope
+
+- No voice-model integration spec.
+- No OpenAI, ASR, TTS, or realtime voice provider dependency.
+- No telephony provider integration.
+- No phone-number provisioning or inbound/outbound calling.
+- No audio file input, audio file output, or recording processing.
+- No production merchant API integration.
+- No real customer data, raw recordings, or PII.
+
+### Task 7.1: Add Call Simulation Request Examples
+
+Purpose: provide checked-in payloads that represent the main MVP call-flow paths.
+
+Inputs:
+
+- Existing `CallFlowInput` model
+- Current mock adapter behavior
+
+Outputs:
+
+- `examples/call-simulations/product-usage.json`
+- `examples/call-simulations/order-status.json`
+- `examples/call-simulations/logistics-tracking.json`
+- `examples/call-simulations/customer-requests-human.json`
+- `examples/call-simulations/low-asr-confidence.json`
+
+Validation:
+
+```bash
+python3 -m pytest tests/test_example_call_payloads.py
+```
+
+Expected output: all example payloads validate against `CallFlowInput` and return HTTP 200 from the simulation endpoint.
+
+Suggested commit:
+
+```bash
+git add examples/call-simulations tests/test_example_call_payloads.py
+git commit -m "test: validate call simulation examples"
+```
+
+### Task 7.2: Add Local API Smoke Script
+
+Purpose: provide a repeatable local command that verifies a running API server.
+
+Inputs:
+
+- Running FastAPI server
+- Example request payloads from Task 7.1
+
+Outputs:
+
+- `scripts/smoke_api.py`
+
+Validation:
+
+```bash
+python3 scripts/smoke_api.py --base-url http://127.0.0.1:8000
+```
+
+Expected output: `/health` passes and each example call returns a successful JSON response.
+
+Suggested commit:
+
+```bash
+git add scripts/smoke_api.py
+git commit -m "chore: add local API smoke script"
+```
+
+### Task 7.3: Document Local E2E Usage
+
+Purpose: make local backend verification discoverable from the project README.
+
+Inputs:
+
+- Existing `README.md`
+- Example request payloads
+- Smoke script
+
+Outputs:
+
+- Updated `README.md`
+
+Required content:
+
+- API startup command.
+- Example payload directory.
+- Smoke script command.
+- Explicit note that this phase does not include voice-model, ASR, TTS, telephony, or audio-file processing.
+
+Validation:
+
+```bash
+python3 -m pytest
+python3 scripts/validate_call_evaluations.py data/call-evaluations/sample.json
+```
+
+Expected output: all tests pass and sample validation passes.
+
+Suggested commit:
+
+```bash
+git add README.md
+git commit -m "docs: document local API smoke testing"
+```
+
+### Task 7.4: Run Final Verification
+
+Purpose: confirm the example and smoke-script phase did not change backend behavior.
+
+Inputs:
+
+- Completed Phase 7.1-7.3
+
+Outputs:
+
+- Terminal verification evidence
+
+Validation:
+
+```bash
+python3 -m pytest
+python3 scripts/validate_call_evaluations.py data/call-evaluations/sample.json
+git status --short --branch
+```
+
+Expected output: tests pass, sample validation passes, and no unexpected files remain.
+
+---
+
 ## Self-Review
 
 Spec coverage:
@@ -1174,4 +1316,3 @@ Known non-goals:
 - No real merchant API credentials.
 - No raw recordings or PII.
 - No dashboard UI.
-
