@@ -1,0 +1,11 @@
+{
+  "call_id": "CALL-REDACTED-LOGISTICS",
+  "merchant_id": "merchant_demo",
+  "locale": "en-GB",
+  "intent": "logistics_tracking",
+  "utterance": "When will my package arrive?",
+  "order_id_candidate": "ORDER-REDACTED-001",
+  "order_id_confirmed": true,
+  "asr_confidence": 0.91,
+  "customer_requested_human": false
+}
