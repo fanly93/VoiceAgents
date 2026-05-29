@@ -1,0 +1,59 @@
+from voiceagents.adapters.handoff import MockHandoffAdapter
+from voiceagents.adapters.knowledge import MockKnowledgeAdapter
+from voiceagents.agent.models import CallFlowInput
+from voiceagents.agent.service import CallFlowService
+from voiceagents.contracts.common import HandoffReason
+
+
+def test_known_product_question_is_resolved() -> None:
+    service = CallFlowService(
+        handoff_adapter=MockHandoffAdapter(),
+        knowledge_adapter=MockKnowledgeAdapter(),
+    )
+
+    output = service.handle(
+        CallFlowInput(
+            call_id="CALL-REDACTED",
+            merchant_id="merchant_demo",
+            locale="en-GB",
+            intent="product_usage",
+            utterance="How should I wash my wig?",
+            order_id_candidate=None,
+            order_id_confirmed=False,
+            asr_confidence=0.91,
+            customer_requested_human=False,
+        )
+    )
+
+    assert output.resolved is True
+    assert output.handoff_required is False
+    assert output.handoff_reason == HandoffReason.NONE
+    assert output.tools_called == ["query_product_knowledge"]
+    assert "cool water" in output.response_text
+
+
+def test_unknown_product_question_hands_off() -> None:
+    service = CallFlowService(
+        handoff_adapter=MockHandoffAdapter(),
+        knowledge_adapter=MockKnowledgeAdapter(),
+    )
+
+    output = service.handle(
+        CallFlowInput(
+            call_id="CALL-REDACTED",
+            merchant_id="merchant_demo",
+            locale="en-GB",
+            intent="product_usage",
+            utterance="Can this wig survive a space flight?",
+            order_id_candidate=None,
+            order_id_confirmed=False,
+            asr_confidence=0.91,
+            customer_requested_human=False,
+        )
+    )
+
+    assert output.resolved is False
+    assert output.handoff_required is True
+    assert output.handoff_reason == HandoffReason.RAG_LOW_CONFIDENCE
+    assert output.handoff_id == "HANDOFF-REDACTED"
+

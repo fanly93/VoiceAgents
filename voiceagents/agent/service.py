@@ -1,6 +1,7 @@
 from voiceagents.agent.models import CallFlowInput, CallFlowOutput
 from voiceagents.contracts.common import HandoffReason
 from voiceagents.contracts.handoff import HandoffRequest
+from voiceagents.contracts.knowledge import ProductKnowledgeRequest
 from voiceagents.contracts.logistics import LookupLogisticsRequest
 from voiceagents.contracts.order import LookupOrderRequest
 
@@ -9,10 +10,11 @@ LOW_ASR_CONFIDENCE_THRESHOLD = 0.6
 
 
 class CallFlowService:
-    def __init__(self, handoff_adapter, order_adapter=None, logistics_adapter=None) -> None:
+    def __init__(self, handoff_adapter, order_adapter=None, logistics_adapter=None, knowledge_adapter=None) -> None:
         self._handoff_adapter = handoff_adapter
         self._order_adapter = order_adapter
         self._logistics_adapter = logistics_adapter
+        self._knowledge_adapter = knowledge_adapter
 
     def handle(self, call: CallFlowInput) -> CallFlowOutput:
         if call.asr_confidence < LOW_ASR_CONFIDENCE_THRESHOLD:
@@ -51,6 +53,21 @@ class CallFlowService:
                     handoff_id=None,
                 )
             return self._handoff(call, HandoffReason.TOOL_ERROR, response.user_summary)
+
+        if call.intent == "product_usage":
+            response = self._knowledge_adapter.query(
+                ProductKnowledgeRequest(merchant_id=call.merchant_id, locale=call.locale, query=call.utterance)
+            )
+            if response.ok and not response.handoff_recommended:
+                return CallFlowOutput(
+                    resolved=True,
+                    response_text=response.short_answer,
+                    tools_called=["query_product_knowledge"],
+                    handoff_required=False,
+                    handoff_reason=HandoffReason.NONE,
+                    handoff_id=None,
+                )
+            return self._handoff(call, HandoffReason.RAG_LOW_CONFIDENCE, response.short_answer)
 
         return self._handoff(call, HandoffReason.UNSUPPORTED_INTENT, "Intent is not supported yet.")
 
