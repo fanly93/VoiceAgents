@@ -1,9 +1,12 @@
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from voiceagents.contracts.common import HandoffReason
+from voiceagents.contracts.logistics import LookupLogisticsRequest
+from voiceagents.contracts.order import LookupOrderRequest
 from voiceagents.realtime.contracts import (
     ALLOWED_REALTIME_TOOL_NAMES,
     RealtimeToolCallRequest,
+    RealtimeToolCallResponse,
 )
 from voiceagents.realtime.session_store import InMemoryVoiceSessionStore, VoiceSessionNotFound
 
@@ -59,8 +62,16 @@ TOOL_ARGUMENT_SCHEMAS: dict[str, type[BaseModel]] = {
 
 
 class RealtimeToolRouter:
-    def __init__(self, *, session_store: InMemoryVoiceSessionStore) -> None:
+    def __init__(
+        self,
+        *,
+        session_store: InMemoryVoiceSessionStore,
+        order_adapter: object | None = None,
+        logistics_adapter: object | None = None,
+    ) -> None:
         self._session_store = session_store
+        self._order_adapter = order_adapter
+        self._logistics_adapter = logistics_adapter
 
     def validate_request(self, request: RealtimeToolCallRequest, tool_call_token: str) -> None:
         if request.tool_name not in ALLOWED_REALTIME_TOOL_NAMES:
@@ -83,3 +94,68 @@ class RealtimeToolRouter:
             return schema.model_validate(request.arguments)
         except ValidationError as error:
             raise InvalidToolArgumentsError("Invalid realtime tool arguments") from error
+
+    def execute(
+        self,
+        request: RealtimeToolCallRequest,
+        *,
+        tool_call_token: str,
+    ) -> RealtimeToolCallResponse:
+        self.validate_request(request, tool_call_token)
+        arguments = self.validate_arguments(request)
+
+        if isinstance(arguments, LookupOrderArguments):
+            return self._lookup_order(request, arguments)
+        if isinstance(arguments, LookupLogisticsArguments):
+            return self._lookup_logistics(request, arguments)
+
+        raise UnknownRealtimeToolError(f"Realtime tool is not routed yet: {request.tool_name}")
+
+    def _lookup_order(
+        self,
+        request: RealtimeToolCallRequest,
+        arguments: LookupOrderArguments,
+    ) -> RealtimeToolCallResponse:
+        if self._order_adapter is None:
+            raise UnknownRealtimeToolError("Order adapter is not configured")
+
+        response = self._order_adapter.lookup_order(
+            LookupOrderRequest(merchant_id=request.merchant_id, order_id=arguments.order_id)
+        )
+        handoff_required = not response.ok
+        return RealtimeToolCallResponse(
+            ok=response.ok,
+            tool_name=request.tool_name,
+            result=response.safe_fields,
+            safe_summary=response.user_summary,
+            handoff_required=handoff_required,
+            handoff_reason=HandoffReason.TOOL_ERROR if handoff_required else HandoffReason.NONE,
+            error_code=response.error_code,
+        )
+
+    def _lookup_logistics(
+        self,
+        request: RealtimeToolCallRequest,
+        arguments: LookupLogisticsArguments,
+    ) -> RealtimeToolCallResponse:
+        if self._logistics_adapter is None:
+            raise UnknownRealtimeToolError("Logistics adapter is not configured")
+
+        response = self._logistics_adapter.lookup_logistics(
+            LookupLogisticsRequest(merchant_id=request.merchant_id, order_id=arguments.order_id)
+        )
+        handoff_required = not response.ok
+        return RealtimeToolCallResponse(
+            ok=response.ok,
+            tool_name=request.tool_name,
+            result={
+                "status": response.status,
+                "latest_event": response.latest_event,
+                "estimated_delivery": response.estimated_delivery,
+                "carrier": response.carrier,
+            },
+            safe_summary=response.user_summary,
+            handoff_required=handoff_required,
+            handoff_reason=HandoffReason.TOOL_ERROR if handoff_required else HandoffReason.NONE,
+            error_code=response.error_code,
+        )
