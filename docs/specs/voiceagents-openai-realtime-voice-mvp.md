@@ -166,6 +166,15 @@ provider 不执行业务工具。工具执行只能通过 VoiceAgents backend：
 - raw audio
 - audio bytes
 
+开发端点访问边界：
+
+- `VOICEAGENTS_REALTIME_PROVIDER=openai_realtime` 时，`POST /v1/realtime/client-secret` 必须额外要求 `VOICEAGENTS_ENABLE_REALTIME_DEV_ENDPOINTS=true`。
+- 该端点本阶段只允许本地研发/内网测试使用，不能暴露到公网生产入口。
+- 浏览器请求必须来自 same-origin 或显式允许的 localhost 开发 origin；不接受任意跨域调用。
+- 必须增加基础 per-IP 或 per-session 限流，避免误调用大量消耗 OpenAI Realtime 分钟数。
+- 如果开发开关未开启，返回 403，不调用 OpenAI，不创建本地 session。
+- README 必须明确写出：该开关不是生产鉴权方案，商家/客服正式入口需要后续独立 auth spec。
+
 ## 连接方式与职责边界
 
 本阶段使用 ephemeral token 模式：
@@ -241,6 +250,7 @@ OPENAI_API_KEY=<server-only>
 VOICEAGENTS_OPENAI_REALTIME_MODEL=gpt-realtime-2
 VOICEAGENTS_OPENAI_REALTIME_VOICE=marin
 VOICEAGENTS_TRANSCRIPT_LOGGING=off|structured|transcript
+VOICEAGENTS_ENABLE_REALTIME_DEV_ENDPOINTS=false|true
 ```
 
 默认值：
@@ -248,6 +258,7 @@ VOICEAGENTS_TRANSCRIPT_LOGGING=off|structured|transcript
 - 默认 `structured`。
 - 研发要保存逐字 transcript 时显式设置 `VOICEAGENTS_TRANSCRIPT_LOGGING=transcript`。
 - CI 和未配置环境不得默认写 transcript。
+- `VOICEAGENTS_ENABLE_REALTIME_DEV_ENDPOINTS` 默认 `false`。
 
 ### OpenAI session config
 
@@ -296,12 +307,16 @@ POST /v1/realtime/event
 
 - 必须包含 `session_id`、`call_id`、`merchant_id`、`event_type`。
 - 必须使用 `Authorization: Bearer <tool_call_token>`，鉴权方式与 `/v1/realtime/tool-call` 一致。
+- bearer token 必须绑定当前 `session_id`、`call_id`、`merchant_id`、`provider`；任一字段不匹配返回 403。
 - 如果顶层 payload 或嵌套 payload 包含 blocked keys，返回 422，不写入日志。
 - 必须走 redaction。
 - 不能接收 raw audio。
 - 不能接收 `client_secret`、`tool_call_token`、`authorization`、SDP。
 - 可以写结构化 event JSONL。
 - 可以写脱敏 transcript JSONL。
+- `text` 只允许作为 ingest 输入存在；任何 JSONL 持久化前都必须转换为 `text_redacted`，原始 `text` 字段不得写入 structured event JSONL 或 transcript JSONL。
+- `tool_call.requested` 事件不得持久化原始 tool arguments，只能保存 `tool_name`、`call_id`、状态、延迟和脱敏后的安全摘要。
+- 浏览器可见的事件面板同样不得显示未脱敏 transcript 或原始 tool arguments。
 
 该 endpoint 不执行工具调用。工具调用仍只能通过 `/v1/realtime/tool-call`。
 
@@ -320,9 +335,19 @@ Request shape:
   "turn_id": "turn-...",
   "sequence": 1,
   "text": "Where is ORDER-123456?",
+  "tool_name": "lookup_order",
+  "provider_call_id": "call-provider-...",
+  "tool_status": "requested",
+  "safe_summary": "Order lookup requested for [ORDER_REDACTED]",
   "latency_ms": 120
 }
 ```
+
+字段规则：
+
+- transcript events 可以提交 `text`，但 repository 只能写 `text_redacted`。
+- tool events 只能提交安全字段：`tool_name`、`provider_call_id`、`tool_status`、`safe_summary`。
+- raw tool arguments 不属于 ingest contract；如果浏览器收到 provider arguments，只能传给 `/v1/realtime/tool-call` 执行业务工具，不得通过 `/v1/realtime/event` 持久化。
 
 Response shape:
 
@@ -338,12 +363,13 @@ Error behavior:
 
 - Missing or invalid bearer token: 401/403.
 - Unknown session: 403.
+- Token/session/call/merchant/provider mismatch: 403.
 - Blocked key present anywhere in payload: 422.
 - Invalid enum/event type: 422.
 
 ## Browser 变更
 
-修改 `voiceagents/api/static/realtime-test.html`。
+修改 `voiceagents/api/static/realtime-test.html`，并新增独立浏览器 adapter 模块。HTML 只负责页面 wiring、按钮状态和资源生命周期；OpenAI event normalization、tool result event 构造、transcript turn 聚合必须放在可单独测试的 JS module 中。
 
 必须行为：
 
@@ -366,6 +392,12 @@ Error behavior:
   - 清理 JS state 中的 secrets。
 - Mute:
   - toggle 本地 audio tracks 的 `enabled`。
+- 错误状态：
+  - 麦克风权限拒绝时显示明确错误状态，不创建 OpenAI call。
+  - `/v1/realtime/client-secret` 失败时不创建 WebRTC 资源。
+  - OpenAI SDP exchange 失败时关闭已创建的本地 tracks 和 peer connection。
+  - data channel close/error 时更新状态，并允许用户重新 Start。
+  - Mute 只影响本地 audio track enabled 状态，不销毁 session。
 - UI 显示：
   - session state
   - provider
@@ -410,9 +442,9 @@ OpenAI adapter 负责把 OpenAI provider event 映射到这些内部事件。
 Adapter 所属位置：
 
 - 后端 provider adapter：`voiceagents/realtime/providers.py`，负责 provider credential creation。
-- 浏览器 WebRTC adapter：`realtime-test.html` 内的 JS module/function，负责 provider data-channel event normalization 和 provider-specific result submission。
+- 浏览器 WebRTC adapter：独立静态 JS module，负责 provider data-channel event normalization、provider-specific result submission、turn 聚合。
 - 内部 normalized event contract：`voiceagents/realtime/contracts.py`，后端用于验证 `/v1/realtime/event` payload。
-- 后续如果前端变复杂，可以把浏览器 adapter 拆到独立静态 JS 文件；本阶段不引入前端构建工具。
+- 本阶段不引入前端构建工具；如果使用独立 `.js` 文件，必须可由 `/realtime-test` 直接加载，并可被测试读取 fixture 验证。
 
 OpenAI adapter 至少要覆盖以下 OpenAI Realtime 事件族：
 
@@ -496,6 +528,14 @@ OpenAI 工具结果回传规则：
 - 本地研发要保存逐字 transcript 时显式设置 `VOICEAGENTS_TRANSCRIPT_LOGGING=transcript`。
 - `transcript` 模式只保存脱敏文本，不保存未脱敏文本。
 
+结构化 event JSONL 脱敏规则：
+
+- 所有进入 repository 的 event payload 必须先复制并脱敏，禁止把原始 ingest object 直接序列化。
+- 原始 `text` 字段不得出现在 structured event JSONL；如果需要保留文本，只能写 `text_redacted`。
+- `VOICEAGENTS_TRANSCRIPT_LOGGING=off` 时，transcript event 可以写 lifecycle metadata，但不得写 `text` 或 `text_redacted`。
+- `VOICEAGENTS_TRANSCRIPT_LOGGING=structured` 时，structured event JSONL 可以写 `text_redacted`，但不得写 transcript JSONL。
+- `tool_call.requested` 的 structured event JSONL 不写原始 arguments；只写 tool 名称、provider call id、状态、延迟和脱敏 safe summary。
+
 逐字 transcript 语义：
 
 - `delta` 事件可以逐条写入，便于调试流式识别。
@@ -527,22 +567,23 @@ Transcript JSONL shape：
 ## 验收标准
 
 1. `VOICEAGENTS_REALTIME_PROVIDER=mock` 时，现有 realtime tests 和 smoke scripts 继续通过。
-2. `VOICEAGENTS_REALTIME_PROVIDER=openai_realtime` 且 `OPENAI_API_KEY` 有效时，`/v1/realtime/client-secret` 返回 OpenAI ephemeral client secret 和本地 `tool_call_token`。
-3. `/realtime-test` 可以建立 OpenAI Realtime WebRTC session。
-4. 浏览器可以采集麦克风输入。
-5. 浏览器可以播放模型语音输出。
-6. 可以完成 3 分钟连续语音会话，页面不刷新，后端不崩溃。
-7. 可以触发并完成订单、物流、商品知识、转人工四类工具调用。
-8. 工具结果可以通过 data channel 回传给 OpenAI Realtime。
-9. 可以写结构化事件 JSONL。
-10. 可以写脱敏 transcript JSONL。
-11. JSONL 中没有 raw audio、未脱敏 transcript、OpenAI API key、client secret、tool token、Authorization header、SDP。
-12. OpenAI provider-specific events 被隔离在 adapter 层，业务工具层不依赖 OpenAI 事件名。
-13. 本阶段不接 telephony、真实电话、SaaS 商家配置、知识库后台、客服后台。
-14. `/v1/realtime/event` 可以记录结构化事件和脱敏 transcript，并拒绝 blocked keys。
-15. 自动化测试不依赖真实 OpenAI key；真实 OpenAI 3 分钟会话作为手动验收。
-16. `/v1/realtime/event` 使用 bearer `tool_call_token` 鉴权，不能匿名写日志。
-17. `VOICEAGENTS_TRANSCRIPT_LOGGING` 未配置时不写 transcript JSONL。
+2. `VOICEAGENTS_REALTIME_PROVIDER=openai_realtime`、`VOICEAGENTS_ENABLE_REALTIME_DEV_ENDPOINTS=true` 且 `OPENAI_API_KEY` 有效时，`/v1/realtime/client-secret` 返回 OpenAI ephemeral client secret 和本地 `tool_call_token`。
+3. `VOICEAGENTS_ENABLE_REALTIME_DEV_ENDPOINTS` 未开启时，真实 provider client-secret endpoint 返回 403，不调用 OpenAI。
+4. `/realtime-test` 可以建立 OpenAI Realtime WebRTC session。
+5. 浏览器可以采集麦克风输入。
+6. 浏览器可以播放模型语音输出。
+7. 可以完成 3 分钟连续语音会话，页面不刷新，后端不崩溃。
+8. 可以触发并完成订单、物流、商品知识、转人工四类工具调用。
+9. 工具结果可以通过 data channel 回传给 OpenAI Realtime。
+10. 可以写结构化事件 JSONL。
+11. 可以写脱敏 transcript JSONL。
+12. JSONL 中没有 raw audio、未脱敏 transcript、未脱敏 tool arguments、OpenAI API key、client secret、tool token、Authorization header、SDP。
+13. OpenAI provider-specific events 被隔离在 adapter 层，业务工具层不依赖 OpenAI 事件名。
+14. 本阶段不接 telephony、真实电话、SaaS 商家配置、知识库后台、客服后台。
+15. `/v1/realtime/event` 可以记录结构化事件和脱敏 transcript，并拒绝 blocked keys。
+16. 自动化测试不依赖真实 OpenAI key；真实 OpenAI 3 分钟会话作为手动验收。
+17. `/v1/realtime/event` 使用 bearer `tool_call_token` 鉴权，不能匿名写日志，且 token/session/call/merchant/provider 必须匹配。
+18. `VOICEAGENTS_TRANSCRIPT_LOGGING` 未配置时不写 transcript JSONL。
 
 ## 测试计划
 
@@ -555,6 +596,7 @@ Transcript JSONL shape：
 | API | `/v1/realtime/client-secret` mock OpenAI HTTP response | +3 |
 | API | `/v1/realtime/event` validation/logging | +3 |
 | Static/UI | `/realtime-test` 包含 WebRTC/data channel hooks，不渲染 secrets | +3 |
+| Browser/Manual | fake media 或手动浏览器验证权限拒绝、SDP 失败、Stop 清理、Mute、重连 | +1 checklist |
 | Smoke | mock realtime smoke 继续通过 | existing |
 | Manual | OpenAI real-mode 3 分钟浏览器语音会话 | +1 checklist |
 
@@ -589,6 +631,7 @@ Transcript JSONL shape：
 | `voiceagents/realtime/redaction.py` | 复用或扩展 transcript redaction |
 | `voiceagents/api/app.py` | 新增 `/v1/realtime/event` |
 | `voiceagents/api/static/realtime-test.html` | 增加 WebRTC microphone/audio/data-channel flow |
+| `voiceagents/api/static/realtime-openai-adapter.js` | OpenAI browser event normalization、tool result event construction、turn aggregation |
 | `scripts/smoke_realtime_api.py` | 保持 mock smoke；补充 real-mode manual checklist |
 | `tests/` | 增加 provider、normalization、transcript、event、API、page tests |
 | `README.md` | 记录 OpenAI Realtime env vars 和手动验证步骤 |

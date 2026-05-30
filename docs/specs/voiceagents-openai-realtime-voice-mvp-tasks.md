@@ -70,6 +70,8 @@ Required outputs:
 - `RealtimeEventIngestResponse`
 - request forbids extra fields
 - request supports `speaker`, `turn_id`, `sequence`, `text`, `latency_ms`, `provider_event_type`
+- request supports safe tool event fields: `tool_name`, `provider_call_id`, `tool_status`, `safe_summary`
+- request rejects or strips raw tool arguments before repository write
 
 Validation:
 
@@ -160,6 +162,38 @@ python3 -m pytest tests/test_realtime_providers.py
 ## Phase 2: OpenAI Provider And Backend Event Ingest
 
 目标：让后端能真实创建 OpenAI ephemeral client secret，并能安全接收浏览器 provider events。
+
+### Task 2.0: Gate Real Provider Dev Endpoints
+
+Purpose: prevent unauthenticated callers from minting paid OpenAI Realtime credentials.
+
+Inputs:
+
+- `VOICEAGENTS_REALTIME_PROVIDER=openai_realtime`
+- `VOICEAGENTS_ENABLE_REALTIME_DEV_ENDPOINTS`
+- Request origin/host headers
+- Existing `/v1/realtime/client-secret`
+
+Outputs:
+
+- Updated API config resolver
+- Updated `voiceagents/api/app.py`
+- Updated `tests/test_api_realtime_client_secret.py`
+
+Required outputs:
+
+- default `VOICEAGENTS_ENABLE_REALTIME_DEV_ENDPOINTS=false`
+- real provider client-secret returns 403 when the dev switch is not true
+- 403 path does not call OpenAI provider
+- 403 path does not create local session
+- same-origin or localhost dev origin required for real provider mode
+- basic per-IP or per-session rate limit exists for client-secret minting
+
+Validation:
+
+```bash
+python3 -m pytest tests/test_api_realtime_client_secret.py
+```
 
 ### Task 2.1: Add OpenAI Client Secret HTTP Boundary
 
@@ -264,6 +298,7 @@ Required outputs:
 - requires `Authorization: Bearer <tool_call_token>`
 - rejects missing/malformed auth
 - rejects invalid token
+- rejects mismatched `session_id`, `call_id`, `merchant_id`, or `provider` for the token with 403
 - returns `{ok, event_id, redaction_applied}`
 
 Validation:
@@ -429,7 +464,7 @@ Required outputs:
 
 - session/tool/error events write structured VoiceEvent JSONL
 - transcript events may also write structured VoiceEvent JSONL
-- event log never includes secrets, SDP, audio bytes, or raw audio
+- event log never includes secrets, SDP, audio bytes, raw audio, raw transcript text, or raw tool arguments
 
 Validation:
 
@@ -437,11 +472,72 @@ Validation:
 python3 -m pytest tests/test_api_realtime_event.py tests/test_realtime_event_log.py
 ```
 
+### Task 3.6: Strip Raw Text And Tool Arguments From All JSONL
+
+Purpose: close the persistence gap between transcript logging and structured event logging.
+
+Inputs:
+
+- `RealtimeEventIngestRequest.text`
+- `tool_call.requested` event payload
+- Email, phone, order, and tool argument samples
+
+Outputs:
+
+- Updated event ingest sanitizer
+- Updated `tests/test_api_realtime_event.py`
+- Updated `tests/test_realtime_event_log.py`
+- Updated `tests/test_realtime_transcript_log.py`
+
+Required outputs:
+
+- raw `text` is converted to `text_redacted` before any repository write
+- raw `text` key is absent from event JSONL and transcript JSONL
+- `VOICEAGENTS_TRANSCRIPT_LOGGING=off` writes no transcript text to any JSONL
+- `VOICEAGENTS_TRANSCRIPT_LOGGING=structured` writes only `text_redacted` in structured event JSONL
+- `tool_call.requested` JSONL stores only tool name, provider call id, status, latency, and redacted safe summary
+- tests assert original email, phone, order id, and tool arguments are absent from all JSONL file content
+
+Validation:
+
+```bash
+python3 -m pytest tests/test_api_realtime_event.py tests/test_realtime_event_log.py tests/test_realtime_transcript_log.py
+```
+
 ---
 
 ## Phase 4: Browser WebRTC And Tool Bridge
 
 目标：让 `/realtime-test` 能创建真实 OpenAI WebRTC 会话，监听 data channel，调用后端工具，并把结果回传给 OpenAI。
+
+### Task 4.0: Verify OpenAI Realtime Event Fixtures
+
+Purpose: avoid implementing stale beta event names.
+
+Inputs:
+
+- Current official OpenAI Realtime event reference
+- Source spec event mapping table
+
+Outputs:
+
+- New `tests/fixtures/openai_realtime_events.json`
+- Updated `docs/specs/voiceagents-openai-realtime-voice-mvp.md` if event names differ from the spec
+
+Required outputs:
+
+- fixture includes transcript delta/done sample
+- fixture includes function/tool call argument completion sample
+- fixture includes function/tool output/response continuation sample
+- fixture includes response done sample
+- fixture includes provider error sample
+- fixture file comments or adjacent doc record the official docs URL and retrieval date
+
+Validation:
+
+```bash
+rg -n "response.output|function|error|retrieval" tests/fixtures docs/specs/voiceagents-openai-realtime-voice-mvp.md
+```
 
 ### Task 4.1: Add Browser Realtime State Object
 
@@ -532,11 +628,12 @@ Purpose: map OpenAI data-channel events to normalized events.
 Inputs:
 
 - Source spec event mapping table
-- OpenAI event fixture samples
+- `tests/fixtures/openai_realtime_events.json`
 
 Outputs:
 
-- JS normalizer in `realtime-test.html`
+- New `voiceagents/api/static/realtime-openai-adapter.js`
+- Updated `voiceagents/api/static/realtime-test.html`
 - Updated `tests/test_api_realtime_test_page.py`
 
 Required outputs:
@@ -546,6 +643,7 @@ Required outputs:
 - maps response done
 - maps error
 - normalized event names match backend contract
+- HTML imports or loads the adapter module instead of embedding OpenAI event mapping inline
 
 Validation:
 
@@ -601,6 +699,7 @@ Required outputs:
 - calls `/v1/realtime/tool-call`
 - shows safe summary in Tool Calls panel
 - handoff result updates Handoff panel
+- raw tool arguments are not rendered in visible DOM or persisted to event JSONL
 
 Validation:
 
@@ -620,7 +719,8 @@ Inputs:
 
 Outputs:
 
-- Updated OpenAI browser adapter in `realtime-test.html`
+- Updated `voiceagents/api/static/realtime-openai-adapter.js`
+- Updated `voiceagents/api/static/realtime-test.html` only for wiring
 - Updated `tests/test_api_realtime_test_page.py`
 
 Required outputs:
@@ -629,6 +729,37 @@ Required outputs:
 - output uses `safe_summary` and safe result fields
 - sends continue/response event if required by OpenAI GA flow
 - does not send token, auth header, raw backend response, or unredacted arguments
+
+Validation:
+
+```bash
+python3 -m pytest tests/test_api_realtime_test_page.py
+```
+
+### Task 4.8: Handle Browser WebRTC Error And Cleanup Paths
+
+Purpose: make the R&D test panel usable when permissions or network calls fail.
+
+Inputs:
+
+- Browser state object from Task 4.1
+- WebRTC setup functions from Task 4.2 and 4.3
+- Adapter module from Task 4.4
+
+Outputs:
+
+- Updated `voiceagents/api/static/realtime-test.html`
+- Updated `tests/test_api_realtime_test_page.py`
+
+Required outputs:
+
+- microphone permission denial shows an error and does not call OpenAI SDP endpoint
+- client-secret failure does not create peer connection or local tracks
+- SDP exchange failure closes peer connection and stops local tracks
+- data channel close/error updates visible state
+- Stop closes data channel, peer connection, remote audio, and local tracks
+- Mute toggles local track `enabled` without ending session
+- reconnect after failure is possible from a clean state
 
 Validation:
 
@@ -662,12 +793,14 @@ Required outputs:
 - documents `VOICEAGENTS_OPENAI_REALTIME_MODEL`
 - documents `VOICEAGENTS_OPENAI_REALTIME_VOICE`
 - documents `VOICEAGENTS_TRANSCRIPT_LOGGING`
+- documents `VOICEAGENTS_ENABLE_REALTIME_DEV_ENDPOINTS`
 - states OpenAI key is server-only
+- states real provider dev endpoints must not be publicly exposed
 
 Validation:
 
 ```bash
-rg -n "VOICEAGENTS_REALTIME_PROVIDER|OPENAI_API_KEY|VOICEAGENTS_TRANSCRIPT_LOGGING" README.md
+rg -n "VOICEAGENTS_REALTIME_PROVIDER|OPENAI_API_KEY|VOICEAGENTS_TRANSCRIPT_LOGGING|VOICEAGENTS_ENABLE_REALTIME_DEV_ENDPOINTS" README.md
 ```
 
 ### Task 5.2: Add Real-Mode Manual Checklist
@@ -691,6 +824,7 @@ Required outputs:
 - trigger four tools
 - verify JSONL contains redacted events/transcripts
 - verify JSONL does not contain secrets, SDP, raw audio, or unredacted transcript
+- verify permission denied, SDP failure, Stop cleanup, Mute, and reconnect paths
 
 Validation:
 
@@ -767,6 +901,7 @@ Purpose: prove real voice loop works with provider credentials.
 Inputs:
 
 - Valid `OPENAI_API_KEY`
+- `VOICEAGENTS_ENABLE_REALTIME_DEV_ENDPOINTS=true`
 - Browser with microphone permission
 - API running with `VOICEAGENTS_REALTIME_PROVIDER=openai_realtime`
 - Manual checklist from Task 5.2
@@ -783,7 +918,35 @@ Validation:
 Manual pass/fail checklist recorded in PR notes.
 ```
 
-### Task 5.7: Run Pre-Merge Review
+### Task 5.7: Run Browser Failure-Mode Verification
+
+Purpose: cover behavior static HTML tests cannot prove.
+
+Inputs:
+
+- Running API
+- Browser with microphone controls or fake media support
+- Manual checklist from Task 5.2
+
+Outputs:
+
+- Browser verification notes
+
+Required outputs:
+
+- permission denied path observed
+- network failure during SDP exchange observed or simulated
+- Stop cleanup verified
+- Mute behavior verified
+- reconnect after failure verified
+
+Validation:
+
+```text
+Browser failure-mode checklist recorded in PR notes.
+```
+
+### Task 5.8: Run Pre-Merge Review
 
 Purpose: satisfy project workflow before merging.
 
