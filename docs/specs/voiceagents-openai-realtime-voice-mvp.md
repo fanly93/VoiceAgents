@@ -212,8 +212,13 @@ provider 不执行业务工具。工具执行只能通过 VoiceAgents backend：
 - 如果 `request.safety_subject_id` 存在，服务端请求包含 `OpenAI-Safety-Identifier`。
 - 返回 OpenAI response 中的 ephemeral `value`。
 - 解析 OpenAI response 中的 `expires_at`。
-- 返回本地 session 的 `tool_call_token`，而不是 OpenAI credential。
 - 不记录 OpenAI request/response 中的 secret。
+
+职责边界：
+
+- `OpenAIRealtimeProvider` 只创建 provider ephemeral credential，不创建本地 session，不生成本地 `tool_call_token`。
+- `/v1/realtime/client-secret` endpoint 负责创建本地 session、生成 `tool_call_token`，并组装最终 `RealtimeClientSecretResponse`。
+- 如果 provider 接口暂时仍复用 `RealtimeClientSecretResponse`，provider 返回的 `tool_call_token` 必须被 app 层创建的本地 token 覆盖；后续实现可拆出 provider credential DTO 以让边界更清晰。
 
 `POST /v1/realtime/client-secret` response shape 保持现有 `RealtimeClientSecretResponse`：
 
@@ -239,6 +244,7 @@ provider 不执行业务工具。工具执行只能通过 VoiceAgents backend：
 
 - `client_secret` 是 provider ephemeral secret，只返回给浏览器一次。
 - `tool_call_token` 是 VoiceAgents 本地 relay token，只用于 `/v1/realtime/tool-call` 和 `/v1/realtime/event`。
+- `/v1/realtime/tool-call` 和 `/v1/realtime/event` 都必须校验 bearer token 与 `session_id`、`call_id`、`merchant_id`、`provider` 的绑定；任一字段不匹配返回 403。
 - `connection_url` 对 OpenAI provider 固定为 `https://api.openai.com/v1/realtime/calls`。
 - `OPENAI_API_KEY` 永远不出现在 response body、日志或浏览器 DOM。
 
@@ -320,7 +326,7 @@ POST /v1/realtime/event
 
 该 endpoint 不执行工具调用。工具调用仍只能通过 `/v1/realtime/tool-call`。
 
-Request shape:
+Transcript event request shape:
 
 ```json
 {
@@ -335,6 +341,21 @@ Request shape:
   "turn_id": "turn-...",
   "sequence": 1,
   "text": "Where is ORDER-123456?",
+  "latency_ms": 120
+}
+```
+
+Tool event request shape:
+
+```json
+{
+  "session_id": "session-...",
+  "call_id": "call-...",
+  "merchant_id": "merchant-demo",
+  "provider": "openai_realtime",
+  "provider_event_type": "response.function_call_arguments.done",
+  "event_type": "tool_call.requested",
+  "state": "tool_calling",
   "tool_name": "lookup_order",
   "provider_call_id": "call-provider-...",
   "tool_status": "requested",
@@ -346,7 +367,9 @@ Request shape:
 字段规则：
 
 - transcript events 可以提交 `text`，但 repository 只能写 `text_redacted`。
+- transcript events 才允许 `speaker` 和 `text`；`speaker` 必须是 `user|assistant`。
 - tool events 只能提交安全字段：`tool_name`、`provider_call_id`、`tool_status`、`safe_summary`。
+- tool events 不得提交 `text`、`arguments`、`tool_arguments` 或 provider raw arguments；出现这些字段时返回 422。
 - raw tool arguments 不属于 ingest contract；如果浏览器收到 provider arguments，只能传给 `/v1/realtime/tool-call` 执行业务工具，不得通过 `/v1/realtime/event` 持久化。
 
 Response shape:
@@ -478,7 +501,7 @@ OpenAI adapter 至少要覆盖以下 OpenAI Realtime 事件族：
 6. 收到 safe tool result。
 7. 将结果通过 provider adapter 转回 provider 需要的 event shape。
 8. 通过 data channel 发回 OpenAI Realtime。
-9. 写结构化事件日志。
+9. 写 `tool_call.requested` 和 `tool_call.result` 结构化事件日志。`tool_call.result` 只保存 safe summary、safe result metadata、provider call id、状态和 latency。
 
 OpenAI 工具结果回传规则：
 
@@ -543,6 +566,12 @@ OpenAI 工具结果回传规则：
 - “完整逐字”以每个 turn 的 `done.text_redacted` 为准。
 - 如果 provider 只提供 delta，不提供 done，实现必须在 adapter 内按 turn 聚合，并在 turn 结束时写 `transcript_done`。
 - transcript 写入前必须脱敏；禁止先写原文再异步脱敏。
+
+Transcript JSONL event type：
+
+- ingest / normalized event 使用 `transcript.user.delta`、`transcript.user.done`、`transcript.assistant.delta`、`transcript.assistant.done`。
+- transcript JSONL 使用独立 `RealtimeTranscriptEventType`：`transcript_delta` 或 `transcript_done`。
+- 如果 provider 只提供 delta，不提供 done，browser adapter 聚合 turn 后向后端提交 normalized `*.done` event；repository 写 `transcript_done`。
 
 Transcript JSONL shape：
 
@@ -652,7 +681,8 @@ VolcRealtimeProvider
 - 订单/物流/商品知识/转人工 adapters
 - transcript repository
 - event log repository
-- session store
+
+本阶段允许把 `provider` 增加为 provider-neutral session metadata，以支持 token/session/call/merchant/provider 绑定校验。完成该元数据后，后续新增 provider 不应再改 session store schema。
 
 如果某个 provider 不支持浏览器 WebRTC，只支持服务端 WebSocket 或 SDK，则应新增独立连接 adapter，并复用同一组 normalized events 和 tool-call boundary。
 

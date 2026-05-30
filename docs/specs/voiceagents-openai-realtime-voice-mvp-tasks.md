@@ -16,6 +16,7 @@ Rules:
 - 每个 task 必须有明确输入、输出和验证方式。
 - 自动化测试不得依赖真实 `OPENAI_API_KEY`。
 - 真实 OpenAI 3 分钟会话只作为手动验收。
+- 所有开发和验证命令必须在隔离的 `.venv` 或 conda 环境中执行；不要使用系统 Python 环境。
 
 ---
 
@@ -45,7 +46,7 @@ Required outputs:
 Validation:
 
 ```bash
-python3 -m pytest tests/test_realtime_contracts.py
+python -m pytest tests/test_realtime_contracts.py
 ```
 
 ### Task 1.2: Add Realtime Event Ingest Contract
@@ -69,14 +70,15 @@ Required outputs:
 - `RealtimeEventIngestRequest`
 - `RealtimeEventIngestResponse`
 - request forbids extra fields
-- request supports `speaker`, `turn_id`, `sequence`, `text`, `latency_ms`, `provider_event_type`
-- request supports safe tool event fields: `tool_name`, `provider_call_id`, `tool_status`, `safe_summary`
-- request rejects or strips raw tool arguments before repository write
+- transcript events support `speaker`, `turn_id`, `sequence`, `text`, `latency_ms`, `provider_event_type`
+- tool events support safe fields only: `tool_name`, `provider_call_id`, `tool_status`, `safe_summary`
+- transcript-only fields and tool-only fields cannot be mixed on unrelated event types
+- request rejects raw tool arguments with 422 before repository write; rejected field names include `arguments`, `tool_arguments`, and provider raw argument payloads
 
 Validation:
 
 ```bash
-python3 -m pytest tests/test_realtime_contracts.py
+python -m pytest tests/test_realtime_contracts.py
 ```
 
 ### Task 1.3: Add Transcript Event Contract
@@ -96,6 +98,8 @@ Outputs:
 Required outputs:
 
 - `RealtimeTranscriptEvent`
+- `RealtimeTranscriptEventType`
+- transcript JSONL event type values `transcript_delta` and `transcript_done`
 - `speaker` limited to `user|assistant`
 - `text_redacted` required and non-empty
 - `turn_id` and `sequence` supported
@@ -103,7 +107,7 @@ Required outputs:
 Validation:
 
 ```bash
-python3 -m pytest tests/test_realtime_contracts.py
+python -m pytest tests/test_realtime_contracts.py
 ```
 
 ### Task 1.4: Add Transcript Logging Mode Enum
@@ -128,7 +132,7 @@ Required outputs:
 Validation:
 
 ```bash
-python3 -m pytest tests/test_realtime_contracts.py
+python -m pytest tests/test_realtime_contracts.py
 ```
 
 ### Task 1.5: Add OpenAI Tool Schema Mapper Contract Tests
@@ -154,7 +158,7 @@ Required outputs:
 Validation:
 
 ```bash
-python3 -m pytest tests/test_realtime_providers.py
+python -m pytest tests/test_realtime_providers.py
 ```
 
 ---
@@ -192,7 +196,7 @@ Required outputs:
 Validation:
 
 ```bash
-python3 -m pytest tests/test_api_realtime_client_secret.py
+python -m pytest tests/test_api_realtime_client_secret.py
 ```
 
 ### Task 2.1: Add OpenAI Client Secret HTTP Boundary
@@ -217,11 +221,13 @@ Required outputs:
 - Authorization header uses server-side API key
 - optional `OpenAI-Safety-Identifier`
 - request body includes `expires_after`, `session.type`, `session.model`, `session.audio.output.voice`, `session.tools`, `tool_choice`
+- provider defaults are `VOICEAGENTS_OPENAI_REALTIME_MODEL=gpt-realtime-2` and `VOICEAGENTS_OPENAI_REALTIME_VOICE=marin` when env vars are unset
+- `OpenAIRealtimeProvider` creates provider ephemeral credentials only; app layer creates the local session and local `tool_call_token`
 
 Validation:
 
 ```bash
-python3 -m pytest tests/test_realtime_providers.py
+python -m pytest tests/test_realtime_providers.py
 ```
 
 ### Task 2.2: Parse OpenAI Client Secret Response
@@ -243,12 +249,12 @@ Required outputs:
 - `client_secret` uses OpenAI `value`
 - `expires_at` parsed from OpenAI response
 - `connection_url` is `https://api.openai.com/v1/realtime/calls`
-- `model` and `voice` reflect configured values
+- `model` and `voice` reflect configured values or the documented defaults `gpt-realtime-2` and `marin`
 
 Validation:
 
 ```bash
-python3 -m pytest tests/test_realtime_providers.py
+python -m pytest tests/test_realtime_providers.py
 ```
 
 ### Task 2.3: Preserve Missing-Key Safe Failure
@@ -273,7 +279,7 @@ Required outputs:
 Validation:
 
 ```bash
-python3 -m pytest tests/test_api_realtime_client_secret.py
+python -m pytest tests/test_api_realtime_client_secret.py
 ```
 
 ### Task 2.4: Add Event Ingest Endpoint Skeleton
@@ -290,7 +296,9 @@ Inputs:
 Outputs:
 
 - Updated `voiceagents/api/app.py`
+- Updated `voiceagents/realtime/session_store.py`
 - New or updated `tests/test_api_realtime_event.py`
+- Updated `tests/test_realtime_session_store.py`
 
 Required outputs:
 
@@ -300,14 +308,46 @@ Required outputs:
 - rejects invalid token
 - rejects mismatched `session_id`, `call_id`, `merchant_id`, or `provider` for the token with 403
 - returns `{ok, event_id, redaction_applied}`
+- `VoiceSession` stores provider as provider-neutral session metadata
 
 Validation:
 
 ```bash
-python3 -m pytest tests/test_api_realtime_event.py
+python -m pytest tests/test_api_realtime_event.py
 ```
 
-### Task 2.5: Reject Blocked Event Keys
+### Task 2.5: Bind Tool Calls To Session Metadata
+
+Purpose: apply the same session binding guarantees to `/v1/realtime/tool-call`.
+
+Inputs:
+
+- Existing `/v1/realtime/tool-call`
+- `InMemoryVoiceSessionStore`
+- Existing `RealtimeToolRouter`
+
+Outputs:
+
+- Updated `voiceagents/realtime/session_store.py`
+- Updated `voiceagents/realtime/tool_router.py`
+- Updated `voiceagents/api/app.py` if provider context must be passed explicitly
+- Updated `tests/test_api_realtime_tool_call.py`
+- Updated `tests/test_realtime_tool_router.py`
+
+Required outputs:
+
+- `/v1/realtime/tool-call` validates bearer token against `session_id`
+- `/v1/realtime/tool-call` rejects mismatched `call_id`, `merchant_id`, or `provider` with 403
+- token verification remains constant-time for the token hash comparison
+- no raw token is persisted in session metadata, logs, or test fixtures
+
+Validation:
+
+```bash
+python -m pytest tests/test_api_realtime_tool_call.py tests/test_realtime_tool_router.py tests/test_realtime_session_store.py
+```
+
+### Task 2.6: Reject Blocked Event Keys
 
 Purpose: prevent secrets, SDP, and audio payloads from entering logs.
 
@@ -331,7 +371,7 @@ Required outputs:
 Validation:
 
 ```bash
-python3 -m pytest tests/test_api_realtime_event.py tests/test_realtime_event_log.py
+python -m pytest tests/test_api_realtime_event.py tests/test_realtime_event_log.py
 ```
 
 ---
@@ -363,7 +403,7 @@ Required outputs:
 Validation:
 
 ```bash
-python3 -m pytest tests/test_realtime_transcript_log.py
+python -m pytest tests/test_realtime_transcript_log.py
 ```
 
 ### Task 3.2: Redact Transcript Before Write
@@ -389,7 +429,7 @@ Required outputs:
 Validation:
 
 ```bash
-python3 -m pytest tests/test_realtime_transcript_log.py
+python -m pytest tests/test_realtime_transcript_log.py
 ```
 
 ### Task 3.3: Enforce Transcript Logging Modes
@@ -417,7 +457,7 @@ Required outputs:
 Validation:
 
 ```bash
-python3 -m pytest tests/test_api_realtime_event.py
+python -m pytest tests/test_api_realtime_event.py
 ```
 
 ### Task 3.4: Write Transcript Done Events
@@ -443,7 +483,7 @@ Required outputs:
 Validation:
 
 ```bash
-python3 -m pytest tests/test_api_realtime_event.py
+python -m pytest tests/test_api_realtime_event.py
 ```
 
 ### Task 3.5: Preserve Structured VoiceEvent Logging
@@ -469,7 +509,7 @@ Required outputs:
 Validation:
 
 ```bash
-python3 -m pytest tests/test_api_realtime_event.py tests/test_realtime_event_log.py
+python -m pytest tests/test_api_realtime_event.py tests/test_realtime_event_log.py
 ```
 
 ### Task 3.6: Strip Raw Text And Tool Arguments From All JSONL
@@ -496,12 +536,13 @@ Required outputs:
 - `VOICEAGENTS_TRANSCRIPT_LOGGING=off` writes no transcript text to any JSONL
 - `VOICEAGENTS_TRANSCRIPT_LOGGING=structured` writes only `text_redacted` in structured event JSONL
 - `tool_call.requested` JSONL stores only tool name, provider call id, status, latency, and redacted safe summary
+- `tool_call.result` JSONL stores only safe summary, safe result metadata, provider call id, status, latency, and no raw backend response
 - tests assert original email, phone, order id, and tool arguments are absent from all JSONL file content
 
 Validation:
 
 ```bash
-python3 -m pytest tests/test_api_realtime_event.py tests/test_realtime_event_log.py tests/test_realtime_transcript_log.py
+python -m pytest tests/test_api_realtime_event.py tests/test_realtime_event_log.py tests/test_realtime_transcript_log.py
 ```
 
 ---
@@ -560,8 +601,13 @@ Required outputs:
 Validation:
 
 ```bash
-python3 -m pytest tests/test_api_realtime_test_page.py
+python -m pytest tests/test_api_realtime_test_page.py
 ```
+
+Additional verification:
+
+- Extract browser state cleanup and adapter behavior into testable JavaScript functions where practical, or record a Phase 4 browser/fake-media checklist before moving to Phase 5.
+- The checklist must cover microphone permission denial, client-secret failure, SDP exchange failure, data channel close/error, Stop cleanup, Mute, and reconnect from a clean state.
 
 ### Task 4.2: Add Microphone And Remote Audio Setup
 
@@ -588,7 +634,7 @@ Required outputs:
 Validation:
 
 ```bash
-python3 -m pytest tests/test_api_realtime_test_page.py
+python -m pytest tests/test_api_realtime_test_page.py
 ```
 
 ### Task 4.3: Add OpenAI WebRTC Call Creation
@@ -618,7 +664,7 @@ Required outputs:
 Validation:
 
 ```bash
-python3 -m pytest tests/test_api_realtime_test_page.py
+python -m pytest tests/test_api_realtime_test_page.py
 ```
 
 ### Task 4.4: Add Browser Provider Event Normalizer
@@ -648,7 +694,7 @@ Required outputs:
 Validation:
 
 ```bash
-python3 -m pytest tests/test_api_realtime_test_page.py
+python -m pytest tests/test_api_realtime_test_page.py
 ```
 
 ### Task 4.5: Relay Normalized Events To Backend
@@ -675,7 +721,7 @@ Required outputs:
 Validation:
 
 ```bash
-python3 -m pytest tests/test_api_realtime_test_page.py
+python -m pytest tests/test_api_realtime_test_page.py
 ```
 
 ### Task 4.6: Relay Tool Calls To Backend
@@ -704,7 +750,7 @@ Required outputs:
 Validation:
 
 ```bash
-python3 -m pytest tests/test_api_realtime_test_page.py
+python -m pytest tests/test_api_realtime_test_page.py
 ```
 
 ### Task 4.7: Send Tool Results Back To OpenAI
@@ -733,7 +779,7 @@ Required outputs:
 Validation:
 
 ```bash
-python3 -m pytest tests/test_api_realtime_test_page.py
+python -m pytest tests/test_api_realtime_test_page.py
 ```
 
 ### Task 4.8: Handle Browser WebRTC Error And Cleanup Paths
@@ -764,7 +810,7 @@ Required outputs:
 Validation:
 
 ```bash
-python3 -m pytest tests/test_api_realtime_test_page.py
+python -m pytest tests/test_api_realtime_test_page.py
 ```
 
 ---
@@ -792,10 +838,12 @@ Required outputs:
 - documents `OPENAI_API_KEY`
 - documents `VOICEAGENTS_OPENAI_REALTIME_MODEL`
 - documents `VOICEAGENTS_OPENAI_REALTIME_VOICE`
+- documents defaults `VOICEAGENTS_OPENAI_REALTIME_MODEL=gpt-realtime-2` and `VOICEAGENTS_OPENAI_REALTIME_VOICE=marin`
 - documents `VOICEAGENTS_TRANSCRIPT_LOGGING`
 - documents `VOICEAGENTS_ENABLE_REALTIME_DEV_ENDPOINTS`
 - states OpenAI key is server-only
 - states real provider dev endpoints must not be publicly exposed
+- states local development and tests must run inside an isolated `.venv` or conda environment, not system Python
 
 Validation:
 
@@ -855,7 +903,7 @@ Required outputs:
 Validation:
 
 ```bash
-python3 scripts/smoke_realtime_api.py
+python scripts/smoke_realtime_api.py
 ```
 
 ### Task 5.4: Run Focused Realtime Tests
@@ -873,7 +921,7 @@ Outputs:
 Validation:
 
 ```bash
-python3 -m pytest tests/test_realtime_contracts.py tests/test_realtime_providers.py tests/test_api_realtime_client_secret.py tests/test_api_realtime_event.py tests/test_realtime_event_log.py tests/test_realtime_transcript_log.py tests/test_api_realtime_test_page.py tests/test_api_realtime_tool_call.py
+python -m pytest tests/test_realtime_contracts.py tests/test_realtime_providers.py tests/test_api_realtime_client_secret.py tests/test_api_realtime_event.py tests/test_realtime_event_log.py tests/test_realtime_transcript_log.py tests/test_api_realtime_test_page.py tests/test_api_realtime_tool_call.py
 ```
 
 ### Task 5.5: Run Full Test Suite
@@ -891,7 +939,7 @@ Outputs:
 Validation:
 
 ```bash
-python3 -m pytest
+python -m pytest
 ```
 
 ### Task 5.6: Run Manual OpenAI Realtime Verification

@@ -35,10 +35,10 @@ git status --short --branch
 最近相关提交：
 
 ```bash
+6a199b0 docs: add openai realtime handoff
 8dff895 docs: review openai realtime voice mvp plan
 fc66a87 docs: task openai realtime voice mvp
 346b09c docs: spec openai realtime voice mvp
-6bc1b56 Merge pull request #3 from fanly93/docs/gstack-review-before-merge
 ```
 
 本阶段目前只完成了 spec、tasks、autoplan/review 文档，没有开始代码实现。
@@ -59,6 +59,16 @@ fc66a87 docs: task openai realtime voice mvp
 ```bash
 env HOME="$PWD/.gstack-home" GSTACK_HOME="$PWD/.gstack" GSTACK_STATE_DIR="$PWD/.gstack" PATH="$PWD/.bun/bin:$PATH" <gstack-command>
 ```
+
+Python 开发和验证必须使用隔离环境，例如：
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -e ".[dev]"
+```
+
+后续测试命令在激活的隔离环境中使用 `python -m pytest`，不要使用系统 Python 环境。
 
 ## 已完成内容
 
@@ -87,6 +97,7 @@ Status: DRAFT
 - 明确 `/v1/realtime/client-secret` 返回 OpenAI ephemeral client secret 和本地 `tool_call_token`。
 - 明确新增 `/v1/realtime/event`，用于浏览器写入 provider events / transcript events。
 - 明确 `tool_call_token` 必须绑定 `session_id`、`call_id`、`merchant_id`、`provider`。
+- 明确 `/v1/realtime/tool-call` 和 `/v1/realtime/event` 都必须执行 token/session/call/merchant/provider mismatch 校验。
 - 明确所有日志禁止保存：
   - raw audio
   - audio bytes
@@ -110,7 +121,7 @@ Status: DRAFT
 - 明确后续 DashScope、火山云扩展方式：
   - 新增 `<Provider>RealtimeProvider`
   - 新增 `<Provider>RealtimeEventAdapter`
-  - 不改 `RealtimeToolRouter`、业务 adapter、transcript repository、event log repository、session store
+  - 本阶段先把 `provider` 固化为 provider-neutral session metadata；此后新增 provider 不应再改 `RealtimeToolRouter`、业务 adapter、transcript repository、event log repository、session store schema
 
 ### 2. 已完成 tasks 拆分
 
@@ -193,6 +204,7 @@ review 结论：
 - 没有实现 `VOICEAGENTS_ENABLE_REALTIME_DEV_ENDPOINTS` gate。
 - 没有实现 `/v1/realtime/event`。
 - 没有实现 token/session/call/merchant/provider mismatch 校验。
+- 没有实现 `/v1/realtime/tool-call` 的 call/merchant/provider mismatch 校验。
 - 没有实现 transcript JSONL repository。
 - 没有实现 structured event JSONL 的 raw text / raw tool arguments 清洗。
 - 没有新增 `voiceagents/api/static/realtime-openai-adapter.js`。
@@ -282,7 +294,8 @@ review 结论：
 - Task 2.2: Parse OpenAI Client Secret Response
 - Task 2.3: Preserve Missing-Key Safe Failure
 - Task 2.4: Add Event Ingest Endpoint Skeleton
-- Task 2.5: Reject Blocked Event Keys
+- Task 2.5: Bind Tool Calls To Session Metadata
+- Task 2.6: Reject Blocked Event Keys
 
 重点注意：
 
@@ -291,7 +304,7 @@ review 结论：
 - 403 不调用 OpenAI，不创建本地 session。
 - `OPENAI_API_KEY` 只能在服务端使用。
 - `/v1/realtime/event` 使用 bearer `tool_call_token`。
-- token 必须绑定 session/call/merchant/provider。
+- `/v1/realtime/event` 和 `/v1/realtime/tool-call` 的 token 都必须绑定 session/call/merchant/provider。
 
 ### Phase 3: Transcript And Structured Logging
 
