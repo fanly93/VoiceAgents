@@ -5,11 +5,13 @@ from voiceagents.realtime.contracts import (
     RealtimeClientSecretRequest,
     RealtimeProviderName,
     ResponseMode,
+    build_default_realtime_session_config,
 )
 from voiceagents.realtime.providers import (
     MockRealtimeProvider,
     OpenAIRealtimeProvider,
     RealtimeProviderError,
+    map_realtime_tools_to_openai_tools,
 )
 
 
@@ -51,3 +53,20 @@ def test_openai_realtime_provider_fails_without_api_key() -> None:
 
     with pytest.raises(RealtimeProviderError, match="OPENAI_API_KEY"):
         provider.create_client_secret(make_client_secret_request())
+
+
+def test_default_realtime_tools_map_to_openai_function_tools() -> None:
+    config = build_default_realtime_session_config()
+
+    tools = map_realtime_tools_to_openai_tools(config)
+
+    assert {tool["name"] for tool in tools} == ALLOWED_REALTIME_TOOL_NAMES
+    assert all(set(tool) == {"type", "name", "description", "parameters"} for tool in tools)
+    assert all(tool["type"] == "function" for tool in tools)
+    assert {
+        tool["name"]: tool["parameters"]
+        for tool in tools
+    } == {
+        tool.name: tool.parameters_schema
+        for tool in config.tools
+    }

@@ -1,15 +1,33 @@
+from collections.abc import Iterable
 from typing import Protocol
 
 from voiceagents.realtime.contracts import (
     RealtimeClientSecretRequest,
     RealtimeClientSecretResponse,
     RealtimeProviderName,
+    RealtimeSessionConfig,
+    RealtimeToolDefinition,
     build_default_realtime_session_config,
 )
 
 
 class RealtimeProviderError(RuntimeError):
     pass
+
+
+def map_realtime_tools_to_openai_tools(
+    config_or_tools: RealtimeSessionConfig | Iterable[RealtimeToolDefinition],
+) -> list[dict[str, object]]:
+    tools = config_or_tools.tools if isinstance(config_or_tools, RealtimeSessionConfig) else config_or_tools
+    return [
+        {
+            "type": "function",
+            "name": tool.name,
+            "description": tool.description,
+            "parameters": tool.parameters_schema,
+        }
+        for tool in tools
+    ]
 
 
 class RealtimeProvider(Protocol):

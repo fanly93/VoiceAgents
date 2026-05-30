@@ -1,14 +1,21 @@
 from voiceagents.realtime.contracts import (
     ALLOWED_REALTIME_TOOL_NAMES,
     DEFAULT_REALTIME_INSTRUCTIONS,
+    DEFAULT_TRANSCRIPT_LOGGING_MODE,
+    NormalizedRealtimeEventType,
     RealtimeClientSecretRequest,
     RealtimeClientSecretResponse,
+    RealtimeEventIngestRequest,
+    RealtimeEventIngestResponse,
     RealtimeProviderName,
     RealtimeSessionConfig,
+    RealtimeTranscriptEvent,
+    RealtimeTranscriptEventType,
     RealtimeToolCallRequest,
     RealtimeToolCallResponse,
     RealtimeToolDefinition,
     ResponseMode,
+    TranscriptLoggingMode,
     VoiceEvent,
     VoiceSessionState,
     build_default_realtime_session_config,
@@ -36,6 +43,219 @@ def test_response_modes_match_spec() -> None:
 def test_realtime_provider_names_match_spec() -> None:
     assert RealtimeProviderName.MOCK == "mock"
     assert RealtimeProviderName.OPENAI_REALTIME == "openai_realtime"
+
+
+def test_normalized_realtime_event_types_match_spec() -> None:
+    assert {event.value for event in NormalizedRealtimeEventType} == {
+        "session.connecting",
+        "session.connected",
+        "session.ended",
+        "session.error",
+        "transcript.user.delta",
+        "transcript.user.done",
+        "transcript.assistant.delta",
+        "transcript.assistant.done",
+        "tool_call.requested",
+        "tool_call.result",
+        "handoff.requested",
+        "response.done",
+    }
+
+
+def test_realtime_event_ingest_request_accepts_transcript_event() -> None:
+    request = RealtimeEventIngestRequest(
+        session_id="session-123",
+        call_id="call-123",
+        merchant_id="merchant-123",
+        provider=RealtimeProviderName.OPENAI_REALTIME,
+        event_type=NormalizedRealtimeEventType.TRANSCRIPT_ASSISTANT_DELTA,
+        state=VoiceSessionState.TRANSCRIBING,
+        provider_event_type="response.output_audio_transcript.delta",
+        speaker="assistant",
+        turn_id="turn-123",
+        sequence=1,
+        text="Where is ORDER-123456?",
+        latency_ms=120,
+    )
+
+    assert request.text == "Where is ORDER-123456?"
+    assert request.speaker == "assistant"
+
+
+def test_realtime_event_ingest_request_accepts_safe_tool_event() -> None:
+    request = RealtimeEventIngestRequest(
+        session_id="session-123",
+        call_id="call-123",
+        merchant_id="merchant-123",
+        provider=RealtimeProviderName.OPENAI_REALTIME,
+        event_type=NormalizedRealtimeEventType.TOOL_CALL_REQUESTED,
+        state=VoiceSessionState.TOOL_CALLING,
+        provider_event_type="response.function_call_arguments.done",
+        tool_name="lookup_order",
+        provider_call_id="provider-call-123",
+        tool_status="requested",
+        safe_summary="Order lookup requested for [ORDER_REDACTED].",
+        latency_ms=120,
+    )
+
+    assert request.tool_name == "lookup_order"
+    assert request.safe_summary == "Order lookup requested for [ORDER_REDACTED]."
+
+
+def test_realtime_event_ingest_request_rejects_extra_and_raw_argument_fields() -> None:
+    for forbidden_field in ("unknown_field", "arguments", "tool_arguments"):
+        try:
+            RealtimeEventIngestRequest(
+                session_id="session-123",
+                call_id="call-123",
+                merchant_id="merchant-123",
+                provider=RealtimeProviderName.OPENAI_REALTIME,
+                event_type=NormalizedRealtimeEventType.TOOL_CALL_REQUESTED,
+                state=VoiceSessionState.TOOL_CALLING,
+                tool_name="lookup_order",
+                provider_call_id="provider-call-123",
+                tool_status="requested",
+                safe_summary="Order lookup requested.",
+                **{forbidden_field: {"order_id": "ORDER-123456"}},
+            )
+        except ValueError as error:
+            assert forbidden_field in str(error)
+        else:
+            raise AssertionError(f"{forbidden_field} should not be accepted")
+
+
+def test_realtime_event_ingest_request_rejects_mixed_transcript_and_tool_fields() -> None:
+    for transcript_field in (
+        {"text": "raw tool args should not be here"},
+        {"turn_id": "turn-123"},
+        {"sequence": 1},
+    ):
+        try:
+            RealtimeEventIngestRequest(
+                session_id="session-123",
+                call_id="call-123",
+                merchant_id="merchant-123",
+                provider=RealtimeProviderName.OPENAI_REALTIME,
+                event_type=NormalizedRealtimeEventType.TOOL_CALL_REQUESTED,
+                state=VoiceSessionState.TOOL_CALLING,
+                tool_name="lookup_order",
+                provider_call_id="provider-call-123",
+                tool_status="requested",
+                safe_summary="Order lookup requested.",
+                **transcript_field,
+            )
+        except ValueError as error:
+            assert next(iter(transcript_field)) in str(error)
+        else:
+            raise AssertionError(f"tool events must reject {transcript_field}")
+
+    try:
+        RealtimeEventIngestRequest(
+            session_id="session-123",
+            call_id="call-123",
+            merchant_id="merchant-123",
+            provider=RealtimeProviderName.OPENAI_REALTIME,
+            event_type=NormalizedRealtimeEventType.TRANSCRIPT_USER_DELTA,
+            state=VoiceSessionState.TRANSCRIBING,
+            speaker="user",
+            text="Where is my order?",
+            tool_name="lookup_order",
+        )
+    except ValueError as error:
+        assert "tool_name" in str(error)
+    else:
+        raise AssertionError("transcript events must reject tool fields")
+
+
+def test_realtime_event_ingest_request_rejects_transcript_speaker_mismatch() -> None:
+    for event_type, speaker in (
+        (NormalizedRealtimeEventType.TRANSCRIPT_USER_DELTA, "assistant"),
+        (NormalizedRealtimeEventType.TRANSCRIPT_ASSISTANT_DONE, "user"),
+    ):
+        try:
+            RealtimeEventIngestRequest(
+                session_id="session-123",
+                call_id="call-123",
+                merchant_id="merchant-123",
+                provider=RealtimeProviderName.OPENAI_REALTIME,
+                event_type=event_type,
+                state=VoiceSessionState.TRANSCRIBING,
+                speaker=speaker,
+                text="Where is my order?",
+            )
+        except ValueError as error:
+            assert "speaker" in str(error)
+        else:
+            raise AssertionError(f"{event_type} should reject speaker={speaker}")
+
+
+def test_realtime_event_ingest_response_contains_event_id_and_redaction_flag() -> None:
+    response = RealtimeEventIngestResponse(
+        ok=True,
+        event_id="event-123",
+        redaction_applied=True,
+    )
+
+    assert response.ok is True
+    assert response.event_id == "event-123"
+    assert response.redaction_applied is True
+
+
+def test_realtime_transcript_event_contains_redacted_transcript_shape() -> None:
+    event = RealtimeTranscriptEvent(
+        event_id="event-123",
+        timestamp="2026-05-30T00:00:00Z",
+        session_id="session-123",
+        call_id="call-123",
+        merchant_id="merchant-123",
+        speaker="user",
+        event_type=RealtimeTranscriptEventType.TRANSCRIPT_DONE,
+        turn_id="turn-123",
+        sequence=1,
+        text_redacted="Where is [ORDER_REDACTED]?",
+        provider=RealtimeProviderName.OPENAI_REALTIME,
+        provider_event_type="conversation.item.input_audio_transcription.completed",
+        redaction_applied=True,
+    )
+
+    assert event.speaker == "user"
+    assert event.event_type is RealtimeTranscriptEventType.TRANSCRIPT_DONE
+    assert event.text_redacted == "Where is [ORDER_REDACTED]?"
+
+
+def test_realtime_transcript_event_rejects_empty_text_and_unknown_speaker() -> None:
+    for field_update in (
+        {"text_redacted": ""},
+        {"speaker": "system"},
+    ):
+        payload = {
+            "event_id": "event-123",
+            "timestamp": "2026-05-30T00:00:00Z",
+            "session_id": "session-123",
+            "call_id": "call-123",
+            "merchant_id": "merchant-123",
+            "speaker": "user",
+            "event_type": RealtimeTranscriptEventType.TRANSCRIPT_DELTA,
+            "turn_id": "turn-123",
+            "sequence": 1,
+            "text_redacted": "Where is [ORDER_REDACTED]?",
+            "provider": RealtimeProviderName.OPENAI_REALTIME,
+            "provider_event_type": "response.output_audio_transcript.delta",
+            "redaction_applied": True,
+        } | field_update
+        try:
+            RealtimeTranscriptEvent(**payload)
+        except ValueError as error:
+            assert next(iter(field_update)) in str(error)
+        else:
+            raise AssertionError(f"{field_update} should fail validation")
+
+
+def test_transcript_logging_modes_match_spec_with_structured_default() -> None:
+    assert TranscriptLoggingMode.OFF == "off"
+    assert TranscriptLoggingMode.STRUCTURED == "structured"
+    assert TranscriptLoggingMode.TRANSCRIPT == "transcript"
+    assert DEFAULT_TRANSCRIPT_LOGGING_MODE is TranscriptLoggingMode.STRUCTURED
 
 
 def test_client_secret_request_accepts_valid_values() -> None:
