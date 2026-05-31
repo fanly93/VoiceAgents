@@ -118,7 +118,7 @@ Output:
 ```json
 {
   "ok": true,
-  "handoff_id": "HANDOFF-REDACTED",
+  "handoff_id": "HND-20260601-0007",
   "mode": "live_transfer"
 }
 ```

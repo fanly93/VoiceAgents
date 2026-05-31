@@ -7,6 +7,8 @@ Date: 2026-05-29
 Merged PR: https://github.com/fanly93/VoiceAgents/pull/1
 Merge commit: `ab79475`
 
+Note: this is the historical browser/local realtime plumbing phase spec. Its statements about real OpenAI Realtime session creation being deferred applied only to this merged phase. The later real OpenAI WebRTC implementation is specified in `docs/specs/voiceagents-openai-realtime-voice-mvp.md`.
+
 ## Goal
 
 Build the first browser/local realtime plumbing MVP for VoiceAgents without implementing production telephony.
@@ -24,9 +26,9 @@ The MVP must prove that a browser test surface can initialize a realtime-like se
 - No merchant-facing sales demo UI.
 - No real customer PII in repo, fixtures, local logs, or tests.
 - No database migration in this phase; database persistence is represented by repository interfaces only.
-- No real OpenAI Realtime WebRTC session wiring.
-- No browser microphone capture or audio playback.
-- No live speech-to-speech model verification.
+- No real OpenAI Realtime WebRTC session wiring in this historical phase.
+- No browser microphone capture or audio playback in this historical phase.
+- No live speech-to-speech model verification in this historical phase.
 
 ## Product Scope
 
@@ -294,7 +296,7 @@ Rules:
 Implementations:
 
 - `MockRealtimeProvider`
-- `OpenAIRealtimeProvider` boundary with missing-key safe failure; real OpenAI session creation is deferred
+- `OpenAIRealtimeProvider` boundary with missing-key safe failure; real OpenAI session creation was deferred in this historical phase
 
 Configuration:
 
@@ -398,7 +400,7 @@ Test requirements:
 - openai provider fails clearly when `OPENAI_API_KEY` is missing
 - response never includes a standard API key
 - response includes backend-generated session instructions and tool definitions
-- real OpenAI session creation remains deferred; this endpoint only verifies the provider boundary and missing-key failure path for `openai_realtime`
+- real OpenAI session creation remains deferred for this historical phase; this endpoint only verifies the provider boundary and missing-key failure path for `openai_realtime`
 - session is created in session store
 - event log records session creation
 - event log does not contain provider credentials or `tool_call_token`
@@ -498,7 +500,7 @@ The phase is complete when:
 - unclear speech and unconfirmed order IDs have a documented clarification-then-handoff policy
 - event log contains redacted structured events and no raw audio, provider credentials, relay tokens, or unredacted PII
 - default local event-log path is ignored by git
-- documentation explains setup, env vars, mock mode, and the deferred real OpenAI provider boundary
+- documentation explains setup, env vars, mock mode, and the deferred real OpenAI provider boundary for this historical phase
 
 ## Deferred
 

@@ -129,12 +129,12 @@ def test_mark_handoff_sets_handoff_state() -> None:
     session = store.mark_handoff(
         "session-123",
         HandoffReason.CUSTOMER_REQUESTS_HUMAN,
-        "HANDOFF-REDACTED",
+        "HND-20260601-0007",
     )
 
     assert session.state is VoiceSessionState.HANDOFF_PENDING
     assert session.handoff_reason is HandoffReason.CUSTOMER_REQUESTS_HUMAN
-    assert session.handoff_id == "HANDOFF-REDACTED"
+    assert session.handoff_id == "HND-20260601-0007"
 
 
 def test_missing_session_raises_typed_error() -> None:

@@ -37,5 +37,5 @@ def test_mandatory_handoff_rules(call: CallFlowInput, expected_reason: HandoffRe
     assert output.resolved is False
     assert output.handoff_required is True
     assert output.handoff_reason == expected_reason
-    assert output.handoff_id == "HANDOFF-REDACTED"
+    assert output.handoff_id == "HND-20260601-0007"
 

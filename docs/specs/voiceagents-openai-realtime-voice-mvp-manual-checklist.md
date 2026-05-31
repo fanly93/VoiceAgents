@@ -13,7 +13,7 @@ VOICEAGENTS_OPENAI_REALTIME_MODEL=gpt-realtime-2 \
 VOICEAGENTS_OPENAI_REALTIME_VOICE=marin \
 VOICEAGENTS_ENABLE_REALTIME_DEV_ENDPOINTS=true \
 VOICEAGENTS_TRANSCRIPT_LOGGING=structured \
-python -m uvicorn voiceagents.api.main:app --reload
+./.venv/bin/python -m uvicorn voiceagents.api.main:app --reload
 ```
 
 Open:
@@ -27,7 +27,8 @@ http://127.0.0.1:8000/realtime-test
 - Grant microphone permission.
 - Start a realtime session and confirm remote audio can play.
 - Complete a 3 minute conversation without page reload.
-- Trigger all four tools: `lookup_order`, `lookup_logistics`, `query_product_knowledge`, and `handoff_to_human`.
+- Trigger the in-scope real-mode tools for the run.
+- Full unwaived acceptance requires all four tools: `lookup_order`, `lookup_logistics`, `query_product_knowledge`, and `handoff_to_human`.
 - Confirm tool results show only safe summaries in the Tool Calls panel.
 - Confirm handoff updates the Handoff panel.
 
@@ -62,3 +63,34 @@ Log safety checked:
 Failure-mode checks:
 Notes:
 ```
+
+## Recorded Verification - 2026-06-01
+
+```text
+Manual OpenAI realtime verification: PARTIAL PASS
+Date: 2026-06-01
+Browser: User local Chrome
+URL: http://127.0.0.1:8000/realtime-test
+Provider/model: openai_realtime / gpt-realtime-2
+Input: real browser microphone, user-read Chinese prompts
+Duration: user-confirmed longer than 3 minutes
+Mode behavior: Text mode returned text only; Voice mode returned audio; runtime Text/Voice switching worked
+Mute behavior: Mute/Unmute toggled local audio without ending the session and emitted mute_state events
+Tools triggered:
+- query_product_knowledge: PASS, LunaCare wig washing knowledge returned
+- handoff_to_human: PASS, low-confidence knowledge/order-id-unconfirmed flows transferred to human support
+- lookup_order: WAIVED for post-fixture real-mode retest by user; covered by mock/API/pytest with ORD-20260601-1842
+- lookup_logistics: WAIVED for post-fixture real-mode retest by user; covered by mock/API/pytest with ORD-20260601-1842
+Log safety checked: PASS for the current structured JSONL sample; no client_secret, tool_call_token, Authorization, SDP, raw audio, or unredacted transcript observed
+Failure-mode checks:
+- Stop cleanup: PASS by manual flow
+- Mute: PASS by manual flow
+- Microphone permission denial: TODO or defer
+- Client-secret failure: TODO or defer
+- SDP exchange failure: TODO or defer
+- Data channel close/error: TODO or defer
+- Reconnect after failure: TODO or defer
+Notes: This record intentionally distinguishes PASS, WAIVED, and TODO items so merge review can decide whether the remaining browser failure-mode checks block landing.
+```
+
+Latency note: the `/realtime-test` Latency panel currently displays the latest client-secret/start or tool/event relay timing. It is not an end-to-end voice response latency metric.

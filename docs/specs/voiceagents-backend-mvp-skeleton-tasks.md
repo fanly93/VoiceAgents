@@ -539,7 +539,7 @@ Outputs:
 
 Behavior:
 
-- Valid request returns `ok=True`, `handoff_id=HANDOFF-REDACTED`, `mode=live_transfer`.
+- Valid request returns `ok=True`, `handoff_id=HND-20260601-0007`, `mode=live_transfer`.
 
 Steps:
 

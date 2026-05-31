@@ -616,6 +616,8 @@ Transcript JSONL shape：
 17. `/v1/realtime/event` 使用 bearer `tool_call_token` 鉴权，不能匿名写日志，且 token/session/call/merchant/provider 必须匹配。
 18. `VOICEAGENTS_TRANSCRIPT_LOGGING` 未配置时不写 transcript JSONL。
 
+手动验收若因产品决策跳过某个真实浏览器场景，必须在 `docs/specs/voiceagents-openai-realtime-voice-mvp-manual-checklist.md` 记录为 `WAIVED`，并注明替代覆盖来源，例如 mock/API/pytest。
+
 ## 测试计划
 
 | 层级 | 内容 | 数量 |

@@ -24,4 +24,4 @@ def test_low_asr_confidence_hands_off() -> None:
     assert output.resolved is False
     assert output.handoff_required is True
     assert output.handoff_reason == HandoffReason.LOW_ASR_CONFIDENCE
-    assert output.handoff_id == "HANDOFF-REDACTED"
+    assert output.handoff_id == "HND-20260601-0007"

@@ -33,15 +33,16 @@ git status --short
 最近关键提交：
 
 ```bash
+383d24b test: use realistic realtime validation fixtures
+237de6c docs: refresh realtime voice MVP handoff
 4710473 feat: add realtime browser adapter and controls
 c22b06d feat: wire realtime provider event ingest and logs
 59f7414 docs: align realtime MVP validation checklists
 8238903 chore: add checkpoint workflow guardrails
 e89f632 feat: add realtime event contracts
-c74a84c docs: align openai realtime mvp plan
 ```
 
-本阶段已经从文档阶段推进到主体实现完成。自动化测试已通过；真实 OpenAI 语音手动验收仍未完成。
+本阶段已经从文档阶段推进到主体实现完成。自动化测试已通过；真实 OpenAI 语音手动验收的核心路径已经完成，订单/物流真实模式重测按用户确认改为 scoped waiver，failure-mode 仍需按下方矩阵补齐或明确延期。
 
 ## 重要项目规范
 
@@ -175,26 +176,54 @@ tests/fixtures/openai_realtime_events.json
 
 ## 当前明确未完成内容
 
-尚未完成：
+状态：
 
-- 真实 OpenAI Realtime 3 分钟语音会话验收。
-- 真实浏览器麦克风下四个工具触发验收：
-  - `lookup_order`
-  - `lookup_logistics`
-  - `query_product_knowledge`
-  - `handoff_to_human`
-- 真实运行后 JSONL 日志安全检查。
-- 浏览器 failure-mode 手动验证：
+- 已完成：真实 OpenAI Realtime 超过 3 分钟连续语音会话，页面未刷新，后端未崩溃。
+- 已完成：Text 模式仅文字输出，切到 Voice 后有语音输出。
+- 已完成：Mute/Unmute 切换后 Provider Events 显示 `mute_state=muted|unmuted`，会话不断开。
+- 已完成：`query_product_knowledge` 命中真实感商品知识。
+- 已完成：`query_product_knowledge` 低置信结果触发 `handoff_to_human`。
+- 已完成：当前 real-mode session 的 JSONL 日志安全抽查，未发现 `client_secret`、`tool_call_token`、Authorization、SDP、raw audio 或未脱敏 transcript。
+- Scoped waiver：用户确认不再继续手测 `lookup_order` 和 `lookup_logistics` 真实模式重测；这两条路径由 mock/API/pytest 覆盖，并已替换为真实感合成订单号 `ORD-20260601-1842`。
+- 待补齐或明确延期：浏览器 failure-mode 手动验证：
   - microphone permission denied
   - client-secret failure
   - SDP exchange failure
   - data channel close/error
-  - Stop cleanup
-  - Mute
-  - reconnect
+  - reconnect after failure
 - `$gstack-review` merge 前审查。
 - review findings 修复。
 - push / PR / merge。
+
+## 2026-06-01 Real-Mode 手动验收记录
+
+环境：
+
+- URL：`http://127.0.0.1:8000/realtime-test`
+- Provider：`openai_realtime`
+- Model：`gpt-realtime-2`
+- Browser：用户本机 Chrome
+- 麦克风：真实浏览器麦克风，由用户朗读完成
+- Transcript logging：`structured`
+
+结果：
+
+| 验收项 | 状态 | 证据/备注 |
+|---|---|---|
+| 真实 OpenAI session 建立 | PASS | 页面 Session State 进入 connected/ended，Provider Events 显示 `provider=openai_realtime`、`data_channel=open` |
+| 3 分钟连续语音会话 | PASS | 用户确认测试时长超过 3 分钟，多轮对话持续完成 |
+| Text 模式 | PASS | Text 模式下无语音，仅 Assistant Response/Transcript 文本更新 |
+| Voice 模式 | PASS | 切到 Voice 后有模型语音输出 |
+| Mute/Unmute | PASS | Provider Events 连续显示 `mute_state=muted` / `mute_state=unmuted`，本地音轨切换不结束会话 |
+| `query_product_knowledge` 命中 | PASS | LunaCare 假发清洗问题返回知识库答案 |
+| `query_product_knowledge` 低置信转人工 | PASS | 知识库无足够信息时触发 `handoff_to_human` |
+| `handoff_to_human` | PASS | Handoff 面板进入转人工原因，例如 `order_id_unconfirmed` 或低置信相关 handoff |
+| `lookup_order` real-mode 重测 | WAIVED | 用户确认不再继续手测；mock/API/pytest 覆盖，真实感订单号为 `ORD-20260601-1842` |
+| `lookup_logistics` real-mode 重测 | WAIVED | 用户确认不再继续手测；mock/API/pytest 覆盖，真实感物流数据为 YTO Express / Shanghai Hongqiao sorting center |
+| JSONL 日志安全抽查 | PASS | 当前 `.voiceagents/events/realtime-events.jsonl` 抽查未发现 secrets、SDP、raw audio、未脱敏 transcript |
+| Failure-mode 手动验证 | PARTIAL | Stop cleanup、Mute 已覆盖；permission denied、client-secret failure、SDP failure、data channel close/error、failure 后 reconnect 需补测或延期 |
+
+Latency 面板说明：当前 UI 的 Latency 表示最近一次 client-secret/start 或 tool relay/event relay 的局部耗时，不是端到端语音响应延迟。
 
 ## 已知测试经验与注意事项
 
@@ -207,7 +236,7 @@ tests/fixtures/openai_realtime_events.json
 
 本地生成的临时音频和探针在 `test-artifacts/`，已被 `.gitignore` 忽略，不纳入提交。
 
-可用于手机播放的短音频：
+历史生成的短音频位于：
 
 ```text
 test-artifacts/realtime-audio/order_lookup_zh.wav
@@ -216,7 +245,7 @@ test-artifacts/realtime-audio/knowledge_query_zh.wav
 test-artifacts/realtime-audio/handoff_request_zh.wav
 ```
 
-更推荐直接朗读这些句子：
+这些音频属于 `test-artifacts/` 临时产物，若要继续使用手机播放，建议先按当前测试句子重新生成，避免播放旧占位词。当前更推荐直接朗读这些句子：
 
 ```text
 请查询订单 ORD-20260601-1842 的订单状态。
@@ -250,22 +279,20 @@ http://127.0.0.1:8000/realtime-test
 1. 确认 `.env` 已包含有效 `OPENAI_API_KEY`。
 2. Start，授权浏览器麦克风。
 3. 完成 3 分钟真实语音会话。
-4. 依次触发四个工具。
+4. 依次触发当前需要手测的工具；订单/物流 real-mode 重测已按用户确认 scoped waiver，由 mock/API/pytest 覆盖。
 5. 确认 Transcript、Assistant Response、Tool Calls、Handoff、Provider Events 面板符合预期。
 6. 检查 `.voiceagents/events/realtime-events.jsonl` 不含 secrets、SDP、raw audio、未脱敏 transcript。
-7. 做 failure-mode 验证。
+7. 补齐或明确延期 failure-mode 验证。
 
 ## 下一步建议
 
 当前最优下一步：
 
-1. 启动 real-mode 服务。
-2. 用户用真实浏览器麦克风完成 3 分钟语音会话。
-3. 用户朗读或手机播放四个测试语句，验证四工具触发。
-4. 检查 JSONL 日志安全。
-5. 记录手动验收结果。
-6. 单独提交 handoff 更新和验收记录。
-7. 运行 `$gstack-review`。
+1. 提交本次 handoff/checklist/spec/code-drift 修复。
+2. 按需补测或明确延期 failure-mode 剩余项目。
+3. 运行 `$gstack-review`。
+4. 修复 review findings。
+5. push / PR / merge。
 
 ## 推荐新会话开局命令
 

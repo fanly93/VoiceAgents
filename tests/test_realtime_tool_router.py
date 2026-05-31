@@ -214,5 +214,5 @@ def test_tool_router_routes_handoff_to_human_and_marks_session() -> None:
     assert response.ok is True
     assert response.handoff_required is True
     assert response.handoff_reason is HandoffReason.CUSTOMER_REQUESTS_HUMAN
-    assert response.result["handoff_id"] == "HANDOFF-REDACTED"
+    assert response.result["handoff_id"] == "HND-20260601-0007"
     assert store.get_session("session-123").handoff_reason is HandoffReason.CUSTOMER_REQUESTS_HUMAN

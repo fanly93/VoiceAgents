@@ -61,7 +61,7 @@ Simulate a product-support call:
 curl -X POST http://127.0.0.1:8000/v1/calls/simulate \
   -H 'Content-Type: application/json' \
   -d '{
-    "call_id": "CALL-REDACTED",
+    "call_id": "CALL-20260601-0901",
     "merchant_id": "merchant_demo",
     "locale": "zh-CN",
     "intent": "product_usage",

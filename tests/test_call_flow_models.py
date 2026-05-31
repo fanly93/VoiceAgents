@@ -29,7 +29,7 @@ def test_call_flow_output_accepts_valid_data() -> None:
         tools_called=["handoff_to_human"],
         handoff_required=True,
         handoff_reason=HandoffReason.LOW_ASR_CONFIDENCE,
-        handoff_id="HANDOFF-REDACTED",
+        handoff_id="HND-20260601-0007",
     )
 
     assert model.handoff_required is True

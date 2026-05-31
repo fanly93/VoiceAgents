@@ -20,5 +20,5 @@ def test_valid_handoff_returns_live_transfer() -> None:
     )
 
     assert response.ok is True
-    assert response.handoff_id == "HANDOFF-REDACTED"
+    assert response.handoff_id == "HND-20260601-0007"
     assert response.mode == HandoffMode.LIVE_TRANSFER
