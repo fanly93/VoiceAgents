@@ -414,11 +414,15 @@ def test_voice_event_contains_redacted_structured_fields() -> None:
         latency_ms=120,
         provider=RealtimeProviderName.MOCK,
         provider_event_type="response.function_call_arguments.done",
+        provider_call_id="provider-call-123",
+        tool_status="completed",
         redaction_applied=True,
     )
 
     assert event.state is VoiceSessionState.TOOL_CALLING
     assert event.tool_arguments_redacted == {"order_id": "[ORDER_REDACTED]"}
+    assert event.provider_call_id == "provider-call-123"
+    assert event.tool_status == "completed"
 
 
 def test_voice_event_rejects_raw_audio_extra_field() -> None:
@@ -440,6 +444,8 @@ def test_voice_event_rejects_raw_audio_extra_field() -> None:
             latency_ms=None,
             provider=RealtimeProviderName.MOCK,
             provider_event_type=None,
+            provider_call_id=None,
+            tool_status=None,
             redaction_applied=False,
             raw_audio=b"not-allowed",
         )

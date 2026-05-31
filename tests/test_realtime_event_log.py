@@ -5,7 +5,11 @@ from voiceagents.realtime.contracts import (
     VoiceEvent,
     VoiceSessionState,
 )
-from voiceagents.realtime.event_log import InMemoryVoiceEventRepository, JsonlVoiceEventRepository
+from voiceagents.realtime.event_log import (
+    InMemoryVoiceEventRepository,
+    JsonlVoiceEventRepository,
+    find_blocked_event_keys,
+)
 
 
 def make_voice_event() -> VoiceEvent:
@@ -26,6 +30,8 @@ def make_voice_event() -> VoiceEvent:
         latency_ms=None,
         provider=RealtimeProviderName.MOCK,
         provider_event_type=None,
+        provider_call_id=None,
+        tool_status=None,
         redaction_applied=False,
     )
 
@@ -80,3 +86,12 @@ def test_jsonl_voice_event_repository_omits_blocked_secret_keys(tmp_path) -> Non
     assert "secret-should-not-log" not in path.read_text(encoding="utf-8")
     assert "token-should-not-log" not in path.read_text(encoding="utf-8")
     assert "audio-should-not-log" not in path.read_text(encoding="utf-8")
+
+
+def test_find_blocked_event_keys_detects_top_level_and_nested_keys() -> None:
+    assert find_blocked_event_keys(
+        {
+            "raw_audio": "base64-audio",
+            "nested": {"sdp": "v=0", "tool_call_token": "secret-token"},
+        }
+    ) == ["nested.sdp", "nested.tool_call_token", "raw_audio"]

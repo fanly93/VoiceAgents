@@ -15,6 +15,27 @@ from voiceagents.realtime.providers import (
 )
 
 
+class CapturingOpenAITransport:
+    def __init__(self, response_body: dict[str, object] | None = None) -> None:
+        self.response_body = response_body or {
+            "client_secret": {
+                "value": "openai-ephemeral-secret",
+                "expires_at": "2026-05-31T12:00:00Z",
+            }
+        }
+        self.calls: list[dict[str, object]] = []
+
+    def post_json(
+        self,
+        *,
+        url: str,
+        headers: dict[str, str],
+        json_body: dict[str, object],
+    ) -> dict[str, object]:
+        self.calls.append({"url": url, "headers": headers, "json_body": json_body})
+        return self.response_body
+
+
 def make_client_secret_request(response_mode: ResponseMode = ResponseMode.TEXT) -> RealtimeClientSecretRequest:
     return RealtimeClientSecretRequest(
         session_id="session-123",
@@ -70,3 +91,83 @@ def test_default_realtime_tools_map_to_openai_function_tools() -> None:
         tool.name: tool.parameters_schema
         for tool in config.tools
     }
+
+
+def test_openai_realtime_provider_posts_client_secret_request_to_openai() -> None:
+    transport = CapturingOpenAITransport()
+    provider = OpenAIRealtimeProvider(api_key="server-api-key", transport=transport)
+
+    provider.create_client_secret(make_client_secret_request(ResponseMode.VOICE))
+
+    assert len(transport.calls) == 1
+    call = transport.calls[0]
+    assert call["url"] == "https://api.openai.com/v1/realtime/client_secrets"
+    assert call["headers"] == {
+        "Authorization": "Bearer server-api-key",
+        "Content-Type": "application/json",
+        "OpenAI-Safety-Identifier": "subject_hash_123",
+    }
+    body = call["json_body"]
+    assert body["expires_after"] == {"anchor": "created_at", "seconds": 600}
+    session = body["session"]
+    assert session["type"] == "realtime"
+    assert session["model"] == "gpt-realtime-2"
+    assert session["output_modalities"] == ["audio"]
+    assert session["audio"]["output"]["voice"] == "marin"
+    assert session["audio"]["input"]["transcription"] == {
+        "model": "gpt-4o-mini-transcribe",
+        "language": "en",
+    }
+    assert {tool["name"] for tool in session["tools"]} == ALLOWED_REALTIME_TOOL_NAMES
+    assert session["tool_choice"] == "auto"
+
+
+def test_openai_realtime_provider_sets_text_output_modality_for_text_mode() -> None:
+    transport = CapturingOpenAITransport()
+    provider = OpenAIRealtimeProvider(api_key="server-api-key", transport=transport)
+
+    provider.create_client_secret(make_client_secret_request(ResponseMode.TEXT))
+
+    session = transport.calls[0]["json_body"]["session"]
+    assert session["output_modalities"] == ["text"]
+
+
+def test_openai_realtime_provider_omits_safety_identifier_when_absent() -> None:
+    transport = CapturingOpenAITransport()
+    provider = OpenAIRealtimeProvider(api_key="server-api-key", transport=transport)
+    request = make_client_secret_request()
+    request.safety_subject_id = None
+
+    provider.create_client_secret(request)
+
+    assert "OpenAI-Safety-Identifier" not in transport.calls[0]["headers"]
+
+
+def test_openai_realtime_provider_maps_client_secret_response() -> None:
+    transport = CapturingOpenAITransport(
+        {
+            "client_secret": {
+                "value": "openai-ephemeral-secret",
+                "expires_at": "2026-05-31T12:00:00Z",
+            }
+        }
+    )
+    provider = OpenAIRealtimeProvider(
+        api_key="server-api-key",
+        model="gpt-realtime-custom",
+        voice="cedar",
+        transport=transport,
+    )
+
+    response = provider.create_client_secret(make_client_secret_request(ResponseMode.VOICE))
+
+    assert response.provider is RealtimeProviderName.OPENAI_REALTIME
+    assert response.session_id == "session-123"
+    assert response.call_id == "call-123"
+    assert response.client_secret == "openai-ephemeral-secret"
+    assert response.expires_at == "2026-05-31T12:00:00Z"
+    assert response.connection_url == "https://api.openai.com/v1/realtime/calls"
+    assert response.model == "gpt-realtime-custom"
+    assert response.voice == "cedar"
+    assert response.tool_call_token == "provider-credentials-only"
+    assert {tool.name for tool in response.session_config.tools} == ALLOWED_REALTIME_TOOL_NAMES

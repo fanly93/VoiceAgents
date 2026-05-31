@@ -283,6 +283,8 @@ class VoiceEvent(BaseModel):
     latency_ms: int | None = Field(default=None, ge=0)
     provider: RealtimeProviderName
     provider_event_type: str | None
+    provider_call_id: str | None = Field(default=None, min_length=1)
+    tool_status: str | None = Field(default=None, min_length=1)
     redaction_applied: bool
 
 

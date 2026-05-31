@@ -2,11 +2,12 @@ import json
 from pathlib import Path
 from typing import Protocol
 
-from voiceagents.realtime.contracts import VoiceEvent
+from voiceagents.realtime.contracts import RealtimeTranscriptEvent, VoiceEvent
 from voiceagents.realtime.redaction import Redactor, redact_mapping
 
 
 DEFAULT_EVENT_LOG_PATH = Path(".voiceagents/events/realtime-events.jsonl")
+DEFAULT_TRANSCRIPT_LOG_PATH = Path(".voiceagents/transcripts/realtime-transcripts.jsonl")
 BLOCKED_EVENT_KEYS = frozenset(
     {
         "raw_audio",
@@ -15,6 +16,7 @@ BLOCKED_EVENT_KEYS = frozenset(
         "client_secret",
         "tool_call_token",
         "authorization",
+        "sdp",
     }
 )
 
@@ -24,11 +26,24 @@ class VoiceEventRepository(Protocol):
         raise NotImplementedError
 
 
+class RealtimeTranscriptRepository(Protocol):
+    def append(self, event: RealtimeTranscriptEvent) -> None:
+        raise NotImplementedError
+
+
 class InMemoryVoiceEventRepository:
     def __init__(self) -> None:
         self.events: list[VoiceEvent] = []
 
     def append(self, event: VoiceEvent) -> None:
+        self.events.append(event)
+
+
+class InMemoryRealtimeTranscriptRepository:
+    def __init__(self) -> None:
+        self.events: list[RealtimeTranscriptEvent] = []
+
+    def append(self, event: RealtimeTranscriptEvent) -> None:
         self.events.append(event)
 
 
@@ -60,6 +75,33 @@ class JsonlVoiceEventRepository:
             file.write(json.dumps(redacted_payload, sort_keys=True) + "\n")
 
 
+class JsonlRealtimeTranscriptRepository:
+    def __init__(
+        self,
+        path: str | Path = DEFAULT_TRANSCRIPT_LOG_PATH,
+        *,
+        redactor: Redactor | None = None,
+    ) -> None:
+        self._path = Path(path)
+        self._redactor = redactor
+
+    def append(self, event: RealtimeTranscriptEvent) -> None:
+        payload = event.model_dump(mode="json")
+        redaction_result = (
+            self._redactor.redact_mapping(payload)
+            if self._redactor is not None
+            else redact_mapping(payload)
+        )
+        redacted_payload = redaction_result.value
+        redacted_payload["redaction_applied"] = (
+            bool(redacted_payload.get("redaction_applied")) or redaction_result.redaction_applied
+        )
+
+        self._path.parent.mkdir(parents=True, exist_ok=True)
+        with self._path.open("a", encoding="utf-8") as file:
+            file.write(json.dumps(redacted_payload, sort_keys=True) + "\n")
+
+
 def _sanitize_mapping(data: dict[str, object]) -> dict[str, object]:
     sanitized: dict[str, object] = {}
     for key, value in data.items():
@@ -68,6 +110,25 @@ def _sanitize_mapping(data: dict[str, object]) -> dict[str, object]:
             continue
         sanitized[key] = _sanitize_value(value)
     return sanitized
+
+
+def find_blocked_event_keys(data: object, prefix: str = "") -> list[str]:
+    if isinstance(data, dict):
+        blocked: list[str] = []
+        for key, value in data.items():
+            path = f"{prefix}.{key}" if prefix else key
+            normalized_key = key.lower().replace("-", "_")
+            if normalized_key in BLOCKED_EVENT_KEYS:
+                blocked.append(path)
+            blocked.extend(find_blocked_event_keys(value, path))
+        return sorted(blocked)
+    if isinstance(data, list):
+        blocked = []
+        for index, item in enumerate(data):
+            path = f"{prefix}[{index}]" if prefix else f"[{index}]"
+            blocked.extend(find_blocked_event_keys(item, path))
+        return sorted(blocked)
+    return []
 
 
 def _sanitize_value(value: object) -> object:

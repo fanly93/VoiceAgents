@@ -7,6 +7,7 @@ from voiceagents.contracts.logistics import LookupLogisticsRequest
 from voiceagents.contracts.order import LookupOrderRequest
 from voiceagents.realtime.contracts import (
     ALLOWED_REALTIME_TOOL_NAMES,
+    RealtimeProviderName,
     RealtimeToolCallRequest,
     RealtimeToolCallResponse,
 )
@@ -79,20 +80,29 @@ class RealtimeToolRouter:
         self._knowledge_adapter = knowledge_adapter
         self._handoff_adapter = handoff_adapter
 
-    def validate_request(self, request: RealtimeToolCallRequest, tool_call_token: str) -> None:
+    def validate_request(
+        self,
+        request: RealtimeToolCallRequest,
+        tool_call_token: str,
+        *,
+        provider: RealtimeProviderName = RealtimeProviderName.MOCK,
+    ) -> None:
         if request.tool_name not in ALLOWED_REALTIME_TOOL_NAMES:
             raise UnknownRealtimeToolError(f"Unknown realtime tool: {request.tool_name}")
 
         try:
-            token_is_valid = self._session_store.verify_tool_call_token(
+            token_is_valid = self._session_store.verify_session_token_binding(
                 request.session_id,
                 tool_call_token,
+                call_id=request.call_id,
+                merchant_id=request.merchant_id,
+                provider=provider,
             )
         except VoiceSessionNotFound as error:
             raise InvalidToolCallTokenError("Invalid realtime tool-call session") from error
 
         if not token_is_valid:
-            raise InvalidToolCallTokenError("Invalid realtime tool-call token")
+            raise InvalidToolCallTokenError("Invalid realtime tool-call token or binding")
 
     def validate_arguments(self, request: RealtimeToolCallRequest) -> BaseModel:
         schema = TOOL_ARGUMENT_SCHEMAS[request.tool_name]
@@ -106,8 +116,9 @@ class RealtimeToolRouter:
         request: RealtimeToolCallRequest,
         *,
         tool_call_token: str,
+        provider: RealtimeProviderName = RealtimeProviderName.MOCK,
     ) -> RealtimeToolCallResponse:
-        self.validate_request(request, tool_call_token)
+        self.validate_request(request, tool_call_token, provider=provider)
         arguments = self.validate_arguments(request)
 
         if isinstance(arguments, LookupOrderArguments):

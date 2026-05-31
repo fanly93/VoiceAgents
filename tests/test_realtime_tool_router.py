@@ -5,7 +5,7 @@ from voiceagents.adapters.handoff import MockHandoffAdapter
 from voiceagents.adapters.knowledge import MockKnowledgeAdapter
 from voiceagents.adapters.order import MockOrderAdapter
 from voiceagents.contracts.common import HandoffReason
-from voiceagents.realtime.contracts import RealtimeToolCallRequest
+from voiceagents.realtime.contracts import RealtimeProviderName, RealtimeToolCallRequest
 from voiceagents.realtime.session_store import InMemoryVoiceSessionStore
 from voiceagents.realtime.tool_router import (
     InvalidToolCallTokenError,
@@ -67,6 +67,30 @@ def test_tool_router_rejects_invalid_token() -> None:
 
     with pytest.raises(InvalidToolCallTokenError):
         router.validate_request(make_tool_call_request(), "wrong-token")
+
+
+def test_tool_router_rejects_session_binding_mismatch() -> None:
+    store, token = make_store_with_session()
+    router = RealtimeToolRouter(session_store=store)
+
+    with pytest.raises(InvalidToolCallTokenError):
+        router.validate_request(
+            make_tool_call_request().model_copy(update={"call_id": "call-other"}),
+            token,
+            provider=RealtimeProviderName.MOCK,
+        )
+    with pytest.raises(InvalidToolCallTokenError):
+        router.validate_request(
+            make_tool_call_request().model_copy(update={"merchant_id": "merchant-other"}),
+            token,
+            provider=RealtimeProviderName.MOCK,
+        )
+    with pytest.raises(InvalidToolCallTokenError):
+        router.validate_request(
+            make_tool_call_request(),
+            token,
+            provider=RealtimeProviderName.OPENAI_REALTIME,
+        )
 
 
 def test_tool_router_validates_tool_arguments() -> None:

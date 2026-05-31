@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from voiceagents.contracts.common import HandoffReason
-from voiceagents.realtime.contracts import VoiceSessionState
+from voiceagents.realtime.contracts import RealtimeProviderName, VoiceSessionState
 from voiceagents.realtime.session_store import (
     DEFAULT_TOOL_CALL_TOKEN_TTL_SECONDS,
     InMemoryVoiceSessionStore,
@@ -24,6 +24,7 @@ def test_create_session_returns_plaintext_token_once_and_stores_hash() -> None:
 
     assert len(created.tool_call_token) >= 32
     assert created.session.token_hash != created.tool_call_token
+    assert created.session.provider is RealtimeProviderName.MOCK
     assert created.session.token_expires_at == now + timedelta(
         seconds=DEFAULT_TOOL_CALL_TOKEN_TTL_SECONDS
     )
@@ -57,6 +58,45 @@ def test_verify_tool_call_token_rejects_wrong_expired_or_ended_token() -> None:
         "session-123",
         created.tool_call_token,
         now=now + timedelta(seconds=2),
+    )
+
+
+def test_verify_session_token_binding_checks_call_merchant_and_provider() -> None:
+    store = InMemoryVoiceSessionStore()
+    created = store.create_session(
+        session_id="session-123",
+        call_id="call-123",
+        merchant_id="merchant-123",
+        provider=RealtimeProviderName.MOCK,
+    )
+
+    assert store.verify_session_token_binding(
+        "session-123",
+        created.tool_call_token,
+        call_id="call-123",
+        merchant_id="merchant-123",
+        provider=RealtimeProviderName.MOCK,
+    )
+    assert not store.verify_session_token_binding(
+        "session-123",
+        created.tool_call_token,
+        call_id="call-other",
+        merchant_id="merchant-123",
+        provider=RealtimeProviderName.MOCK,
+    )
+    assert not store.verify_session_token_binding(
+        "session-123",
+        created.tool_call_token,
+        call_id="call-123",
+        merchant_id="merchant-other",
+        provider=RealtimeProviderName.MOCK,
+    )
+    assert not store.verify_session_token_binding(
+        "session-123",
+        created.tool_call_token,
+        call_id="call-123",
+        merchant_id="merchant-123",
+        provider=RealtimeProviderName.OPENAI_REALTIME,
     )
 
 
