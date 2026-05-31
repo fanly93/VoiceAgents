@@ -1,6 +1,6 @@
 # OpenAI Realtime 真实语音接入 MVP 交接文档
 
-更新时间：2026-05-31
+更新时间：2026-06-01
 
 ## 当前任务
 
@@ -219,9 +219,9 @@ test-artifacts/realtime-audio/handoff_request_zh.wav
 更推荐直接朗读这些句子：
 
 ```text
-请查询订单 Order redacted zero zero one 的订单状态。
-请查询订单 Order redacted zero zero one 的物流信息。
-请问开封后的护肤品退货政策是什么？
+请查询订单 ORD-20260601-1842 的订单状态。
+请查询订单 ORD-20260601-1842 的物流信息。
+请查询商品知识库：LunaCare 假发护理套装应该怎么清洗假发？
 我要转人工客服。
 ```
 

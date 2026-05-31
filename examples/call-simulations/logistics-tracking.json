@@ -1,10 +1,10 @@
 {
-  "call_id": "CALL-REDACTED-LOGISTICS",
+  "call_id": "CALL-20260601-LOGISTICS",
   "merchant_id": "merchant_demo",
-  "locale": "en-GB",
+  "locale": "zh-CN",
   "intent": "logistics_tracking",
-  "utterance": "When will my package arrive?",
-  "order_id_candidate": "ORDER-REDACTED-001",
+  "utterance": "请帮我查一下订单 ORD-20260601-1842 的物流进度。",
+  "order_id_candidate": "ORD-20260601-1842",
   "order_id_confirmed": true,
   "asr_confidence": 0.91,
   "customer_requested_human": false

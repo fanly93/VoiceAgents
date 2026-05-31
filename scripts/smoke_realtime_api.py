@@ -82,9 +82,12 @@ def run_smoke(base_url: str) -> None:
     print(f"client-secret: provider={client_secret.get('provider')} model={client_secret.get('model')}")
 
     tool_calls = [
-        ("lookup_order", {"order_id": "ORDER-REDACTED-001"}),
-        ("lookup_logistics", {"order_id": "ORDER-REDACTED-001"}),
-        ("query_product_knowledge", {"query": "How should I wash this wig?", "locale": "en-US"}),
+        ("lookup_order", {"order_id": "ORD-20260601-1842"}),
+        ("lookup_logistics", {"order_id": "ORD-20260601-1842"}),
+        (
+            "query_product_knowledge",
+            {"query": "LunaCare 假发护理套装应该怎么清洗假发？", "locale": "zh-CN"},
+        ),
         (
             "handoff_to_human",
             {
@@ -116,7 +119,7 @@ def run_smoke(base_url: str) -> None:
             "call_id": "call-smoke",
             "merchant_id": "merchant-demo",
             "tool_name": "lookup_order",
-            "arguments": {"order_id": "ORDER-REDACTED-001"},
+            "arguments": {"order_id": "ORD-20260601-1842"},
         },
         expect_status=401,
     )

@@ -18,7 +18,7 @@ def test_confirmed_logistics_call_is_resolved() -> None:
             locale="en-GB",
             intent="logistics_tracking",
             utterance="Where is my package?",
-            order_id_candidate="ORDER-REDACTED-001",
+            order_id_candidate="ORD-20260601-1842",
             order_id_confirmed=True,
             asr_confidence=0.91,
             customer_requested_human=False,

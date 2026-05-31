@@ -12,7 +12,7 @@ def test_call_flow_input_accepts_valid_data() -> None:
         locale="en-GB",
         intent="order_status",
         utterance="Where is my order?",
-        order_id_candidate="ORDER-REDACTED-001",
+        order_id_candidate="ORD-20260601-1842",
         order_id_confirmed=True,
         asr_confidence=0.91,
         customer_requested_human=False,
@@ -44,9 +44,8 @@ def test_call_flow_input_rejects_confidence_above_one() -> None:
             locale="en-GB",
             intent="order_status",
             utterance="Where is my order?",
-            order_id_candidate="ORDER-REDACTED-001",
+            order_id_candidate="ORD-20260601-1842",
             order_id_confirmed=True,
             asr_confidence=1.2,
             customer_requested_human=False,
         )
-

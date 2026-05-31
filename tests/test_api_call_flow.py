@@ -13,7 +13,7 @@ def test_call_simulation_endpoint_returns_deterministic_product_answer() -> None
             "merchant_id": "merchant_demo",
             "locale": "en-GB",
             "intent": "product_usage",
-            "utterance": "How should I wash my wig?",
+            "utterance": "LunaCare 假发护理套装应该怎么清洗假发？",
             "order_id_candidate": None,
             "order_id_confirmed": False,
             "asr_confidence": 0.91,
@@ -26,4 +26,3 @@ def test_call_simulation_endpoint_returns_deterministic_product_answer() -> None
     assert body["resolved"] is True
     assert body["handoff_required"] is False
     assert "cool water" in body["response_text"]
-

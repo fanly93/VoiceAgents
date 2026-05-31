@@ -1,10 +1,10 @@
 {
-  "call_id": "CALL-REDACTED-ORDER",
+  "call_id": "CALL-20260601-ORDER",
   "merchant_id": "merchant_demo",
-  "locale": "en-GB",
+  "locale": "zh-CN",
   "intent": "order_status",
-  "utterance": "Can you check the status of my order?",
-  "order_id_candidate": "ORDER-REDACTED-001",
+  "utterance": "请帮我查一下订单 ORD-20260601-1842 的订单状态。",
+  "order_id_candidate": "ORD-20260601-1842",
   "order_id_confirmed": true,
   "asr_confidence": 0.92,
   "customer_requested_human": false

@@ -32,7 +32,7 @@ def make_tool_call_request(tool_name: str = "lookup_order") -> RealtimeToolCallR
         call_id="call-123",
         merchant_id="merchant-123",
         tool_name=tool_name,
-        arguments={"order_id": "ORDER-REDACTED-001"},
+        arguments={"order_id": "ORD-20260601-1842"},
     )
 
 
@@ -100,7 +100,7 @@ def test_tool_router_validates_tool_arguments() -> None:
     arguments = router.validate_arguments(make_tool_call_request())
 
     assert isinstance(arguments, LookupOrderArguments)
-    assert arguments.order_id == "ORDER-REDACTED-001"
+    assert arguments.order_id == "ORD-20260601-1842"
 
 
 def test_tool_router_rejects_invalid_tool_arguments() -> None:
@@ -130,7 +130,7 @@ def test_tool_router_rejects_extra_tool_arguments() -> None:
                 call_id="call-123",
                 merchant_id="merchant-123",
                 tool_name="lookup_order",
-                arguments={"order_id": "ORDER-REDACTED-001", "python_module": "os"},
+                arguments={"order_id": "ORD-20260601-1842", "python_module": "os"},
             )
         )
 
@@ -144,7 +144,7 @@ def test_tool_router_routes_order_lookup() -> None:
     assert response.ok is True
     assert response.tool_name == "lookup_order"
     assert response.result == {"order_status": "paid"}
-    assert response.safe_summary == "Order ORDER-REDACTED-001 has been paid."
+    assert response.safe_summary == "Order ORD-20260601-1842 has been paid."
     assert response.handoff_required is False
     assert response.handoff_reason is HandoffReason.NONE
 
@@ -159,7 +159,7 @@ def test_tool_router_routes_logistics_lookup() -> None:
             call_id="call-123",
             merchant_id="merchant-123",
             tool_name="lookup_logistics",
-            arguments={"order_id": "ORDER-REDACTED-001"},
+            arguments={"order_id": "ORD-20260601-1842"},
         ),
         tool_call_token=token,
     )
@@ -181,7 +181,7 @@ def test_tool_router_routes_product_knowledge() -> None:
             call_id="call-123",
             merchant_id="merchant-123",
             tool_name="query_product_knowledge",
-            arguments={"query": "How should I wash this wig?", "locale": "en-US"},
+            arguments={"query": "LunaCare 假发护理套装应该怎么清洗假发？", "locale": "zh-CN"},
         ),
         tool_call_token=token,
     )

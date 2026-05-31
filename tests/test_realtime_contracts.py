@@ -341,7 +341,7 @@ def test_tool_call_request_contains_no_body_token() -> None:
         call_id="call-123",
         merchant_id="merchant-123",
         tool_name="lookup_order",
-        arguments={"order_id": "ORDER-REDACTED-001"},
+        arguments={"order_id": "ORD-20260601-1842"},
     )
 
     assert request.tool_name == "lookup_order"
@@ -355,7 +355,7 @@ def test_tool_call_request_rejects_body_token() -> None:
             call_id="call-123",
             merchant_id="merchant-123",
             tool_name="lookup_order",
-            arguments={"order_id": "ORDER-REDACTED-001"},
+            arguments={"order_id": "ORD-20260601-1842"},
             tool_call_token="must-not-be-in-body",
         )
     except ValueError as error:

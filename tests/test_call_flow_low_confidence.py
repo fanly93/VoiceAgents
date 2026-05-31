@@ -14,7 +14,7 @@ def test_low_asr_confidence_hands_off() -> None:
             locale="en-GB",
             intent="order_status",
             utterance="Where is my order?",
-            order_id_candidate="ORDER-REDACTED-001",
+            order_id_candidate="ORD-20260601-1842",
             order_id_confirmed=True,
             asr_confidence=0.42,
             customer_requested_human=False,
@@ -25,4 +25,3 @@ def test_low_asr_confidence_hands_off() -> None:
     assert output.handoff_required is True
     assert output.handoff_reason == HandoffReason.LOW_ASR_CONFIDENCE
     assert output.handoff_id == "HANDOFF-REDACTED"
-

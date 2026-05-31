@@ -46,7 +46,7 @@ def test_realtime_tool_call_endpoint_routes_known_tool(monkeypatch) -> None:
             "call_id": "call-123",
             "merchant_id": "merchant-123",
             "tool_name": "lookup_order",
-            "arguments": {"order_id": "ORDER-REDACTED-001"},
+            "arguments": {"order_id": "ORD-20260601-1842"},
         },
     )
 
@@ -56,7 +56,7 @@ def test_realtime_tool_call_endpoint_routes_known_tool(monkeypatch) -> None:
     assert body["tool_name"] == "lookup_order"
     assert body["result"] == {"order_status": "paid"}
     assert event_repository.events[-1].event_type == "tool_call"
-    assert event_repository.events[-1].tool_result_summary == "Order ORDER-REDACTED-001 has been paid."
+    assert event_repository.events[-1].tool_result_summary == "Order ORD-20260601-1842 has been paid."
     assert event_repository.events[-1].tool_arguments_redacted is None
 
 
@@ -106,7 +106,7 @@ def test_realtime_tool_call_endpoint_rejects_missing_authorization(monkeypatch) 
             "call_id": "call-123",
             "merchant_id": "merchant-123",
             "tool_name": "lookup_order",
-            "arguments": {"order_id": "ORDER-REDACTED-001"},
+            "arguments": {"order_id": "ORD-20260601-1842"},
         },
     )
 
@@ -126,7 +126,7 @@ def test_realtime_tool_call_endpoint_rejects_invalid_token(monkeypatch) -> None:
             "call_id": "call-123",
             "merchant_id": "merchant-123",
             "tool_name": "lookup_order",
-            "arguments": {"order_id": "ORDER-REDACTED-001"},
+            "arguments": {"order_id": "ORD-20260601-1842"},
         },
     )
 
@@ -150,7 +150,7 @@ def test_realtime_tool_call_endpoint_rejects_session_binding_mismatch(monkeypatc
                 "call_id": "call-123",
                 "merchant_id": "merchant-123",
                 "tool_name": "lookup_order",
-                "arguments": {"order_id": "ORDER-REDACTED-001"},
+                "arguments": {"order_id": "ORD-20260601-1842"},
                 field: value,
             },
         )
@@ -177,7 +177,7 @@ def test_realtime_tool_call_endpoint_rejects_provider_binding_mismatch(monkeypat
             "call_id": "call-123",
             "merchant_id": "merchant-123",
             "tool_name": "lookup_order",
-            "arguments": {"order_id": "ORDER-REDACTED-001"},
+            "arguments": {"order_id": "ORD-20260601-1842"},
         },
     )
 

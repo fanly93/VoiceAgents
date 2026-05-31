@@ -4,14 +4,15 @@ from voiceagents.contracts.knowledge import ProductKnowledgeRequest, ProductKnow
 
 class MockKnowledgeAdapter:
     def query(self, request: ProductKnowledgeRequest) -> ProductKnowledgeResponse:
-        if "wash" in request.query.lower():
+        normalized_query = request.query.lower()
+        if "wash" in normalized_query or "清洗" in normalized_query:
             return ProductKnowledgeResponse(
                 ok=True,
                 short_answer=(
                     "Use cool water and a small amount of wig-safe shampoo. "
                     "Do not twist the hair. Let it air dry on a stand."
                 ),
-                citations=["faq:washing-care"],
+                citations=["faq:lunacare-wig-washing"],
                 confidence=0.86,
                 handoff_recommended=False,
                 error_code=None,

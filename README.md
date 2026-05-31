@@ -63,9 +63,9 @@ curl -X POST http://127.0.0.1:8000/v1/calls/simulate \
   -d '{
     "call_id": "CALL-REDACTED",
     "merchant_id": "merchant_demo",
-    "locale": "en-GB",
+    "locale": "zh-CN",
     "intent": "product_usage",
-    "utterance": "How should I wash my wig?",
+    "utterance": "LunaCare 假发护理套装应该怎么清洗假发？",
     "order_id_candidate": null,
     "order_id_confirmed": false,
     "asr_confidence": 0.91,
