@@ -475,11 +475,13 @@ OpenAI adapter 至少要覆盖以下 OpenAI Realtime 事件族：
 |---|---|
 | session / connection ready event | `session.connected` |
 | error event | `session.error` |
-| user input transcript delta/done event | `transcript.user.delta` / `transcript.user.done` |
+| user input transcript segment/final item event，例如 `conversation.item.input_audio_transcription.segment` / `conversation.item.done` | `transcript.user.delta` / `transcript.user.done` |
 | assistant audio transcript delta/done event，例如 `response.output_audio_transcript.delta` | `transcript.assistant.delta` / `transcript.assistant.done` |
 | assistant text delta event，例如 `response.output_text.delta` | `transcript.assistant.delta` |
 | function/tool call completed argument event | `tool_call.requested` |
 | response completion event | `response.done` |
+
+2026-05-31 官方 OpenAI Realtime reference 已确认：assistant audio transcript 使用 `response.output_audio_transcript.delta` / `response.output_audio_transcript.done`；function call arguments 使用 `response.function_call_arguments.done`；user input transcription 可通过 `conversation.item.input_audio_transcription.segment` 和最终 `conversation.item.done` 中的 input audio transcript 归一化。对应样本固化在 `tests/fixtures/openai_realtime_events.json`。
 
 如果 OpenAI 当前 GA 事件名和上表存在差异，实现时以官方 Realtime server/client event reference 为准，但必须通过 adapter 测试证明 provider event 没有泄露到业务工具层。
 

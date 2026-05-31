@@ -100,7 +100,16 @@ Realtime API endpoints:
 - `POST /v1/realtime/client-secret` creates a local realtime session and returns provider credentials plus a session-bound `tool_call_token`.
 - `POST /v1/realtime/tool-call` relays approved realtime tool calls to the backend. Send the relay token as `Authorization: Bearer <tool_call_token>`.
 
-OpenAI realtime provider mode is selected with:
+Realtime provider environment variables:
+
+- `VOICEAGENTS_REALTIME_PROVIDER=mock|openai_realtime` selects the mock-safe local provider or the OpenAI Realtime provider. Mock mode is the default for development and automated tests.
+- `OPENAI_API_KEY` is required only for `openai_realtime`. It is server-only and must never be exposed to the browser, DOM, logs, tickets, screenshots, or committed files.
+- `VOICEAGENTS_OPENAI_REALTIME_MODEL` defaults to `gpt-realtime-2`.
+- `VOICEAGENTS_OPENAI_REALTIME_VOICE` defaults to `marin`.
+- `VOICEAGENTS_TRANSCRIPT_LOGGING=off|structured|transcript` controls transcript text logging. When unset, it defaults to `structured`; use `transcript` only when local development explicitly needs verbatim transcript text.
+- `VOICEAGENTS_ENABLE_REALTIME_DEV_ENDPOINTS=false|true` gates the real provider client-secret endpoint. It defaults to `false`; set it to `true` only for local OpenAI Realtime development.
+
+OpenAI realtime provider mode can be run locally with:
 
 ```bash
 VOICEAGENTS_REALTIME_PROVIDER=openai_realtime
@@ -111,7 +120,7 @@ VOICEAGENTS_ENABLE_REALTIME_DEV_ENDPOINTS=true
 VOICEAGENTS_TRANSCRIPT_LOGGING=structured
 ```
 
-`OPENAI_API_KEY` is server-only and must never be exposed to the browser, logs, tickets, screenshots, or committed files. `VOICEAGENTS_ENABLE_REALTIME_DEV_ENDPOINTS=true` is a local development gate for the real provider MVP; it is not production authentication and must not be exposed on a public endpoint. If `OPENAI_API_KEY` is missing, the API fails safely with a 503 response instead of exposing provider credentials. Until the OpenAI Realtime MVP implementation lands, mock mode remains the runnable default.
+`VOICEAGENTS_ENABLE_REALTIME_DEV_ENDPOINTS=true` is a local development gate for the real provider MVP; it is not production authentication and must not be exposed on a public endpoint. If `OPENAI_API_KEY` is missing, the API fails safely with a 503 response instead of exposing provider credentials. Development and tests must run inside an isolated `.venv` or conda environment, not the system Python environment.
 
 Current realtime scope is browser/local validation only. This phase does not implement telephony, phone-number provisioning, inbound/outbound calling, or raw audio storage.
 
@@ -122,6 +131,8 @@ Run the realtime smoke test against a running mock-mode server:
 ```bash
 python scripts/smoke_realtime_api.py --base-url http://127.0.0.1:8000
 ```
+
+The realtime smoke script is intentionally mock-mode only. It validates `/health`, client-secret minting, the four approved tool calls, unknown tool rejection, and missing authorization rejection without requiring `OPENAI_API_KEY`. Real OpenAI voice verification is manual; use `docs/specs/voiceagents-openai-realtime-voice-mvp-manual-checklist.md` for the 3 minute `/realtime-test` run and browser failure-mode checks.
 
 Validate example payload compatibility without starting a server:
 
