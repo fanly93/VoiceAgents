@@ -112,6 +112,37 @@ def test_realtime_client_secret_endpoint_rejects_disallowed_real_provider_origin
         store.get_session("session-123")
 
 
+def test_realtime_client_secret_endpoint_rejects_non_local_request_without_origin(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("VOICEAGENTS_REALTIME_PROVIDER", "openai_realtime")
+    monkeypatch.setenv("VOICEAGENTS_ENABLE_REALTIME_DEV_ENDPOINTS", "true")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    store = InMemoryVoiceSessionStore()
+
+    def fail_if_provider_is_built(provider_name: RealtimeProviderName) -> object:
+        raise AssertionError(f"provider should not be built without a local origin: {provider_name}")
+
+    monkeypatch.setattr(api_app, "_build_realtime_provider", fail_if_provider_is_built)
+    client = TestClient(create_app(realtime_session_store=store))
+
+    response = client.post(
+        "/v1/realtime/client-secret",
+        json={
+            "session_id": "session-123",
+            "call_id": "call-123",
+            "merchant_id": "merchant-123",
+            "response_mode": "text",
+            "locale": "en-US",
+        },
+    )
+
+    assert response.status_code == 403
+    assert "origin" in response.json()["detail"].lower()
+    with pytest.raises(VoiceSessionNotFound):
+        store.get_session("session-123")
+
+
 def test_realtime_client_secret_endpoint_rate_limits_real_provider_minting(
     monkeypatch,
 ) -> None:
@@ -174,6 +205,7 @@ def test_realtime_client_secret_endpoint_rejects_missing_openai_key(monkeypatch)
 
     response = client.post(
         "/v1/realtime/client-secret",
+        headers={"Origin": "http://127.0.0.1:8000"},
         json={
             "session_id": "session-123",
             "call_id": "call-123",

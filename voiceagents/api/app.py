@@ -330,11 +330,13 @@ def _enforce_real_provider_dev_gate(
 
     origin = request.headers.get("origin")
     host = request.headers.get("host")
+    client_host = request.client.host if request.client is not None else "unknown"
     if origin is not None and not _is_allowed_realtime_dev_origin(origin, host):
+        raise HTTPException(status_code=403, detail="Origin is not allowed for realtime dev endpoints")
+    if origin is None and not _is_allowed_realtime_dev_client(client_host):
         raise HTTPException(status_code=403, detail="Origin is not allowed for realtime dev endpoints")
 
     limit = _current_realtime_client_secret_rate_limit()
-    client_host = request.client.host if request.client is not None else "unknown"
     counters: dict[str, int] = app.state.realtime_client_secret_rate_limits
     current_count = counters.get(client_host, 0)
     if current_count >= limit:
@@ -350,6 +352,10 @@ def _is_allowed_realtime_dev_origin(origin: str, host: str | None) -> bool:
     if host is None:
         return False
     return parsed.netloc == host
+
+
+def _is_allowed_realtime_dev_client(client_host: str) -> bool:
+    return client_host in {"localhost", "127.0.0.1", "::1"}
 
 
 def _current_realtime_client_secret_rate_limit() -> int:
