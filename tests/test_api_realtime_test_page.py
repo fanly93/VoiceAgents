@@ -220,6 +220,13 @@ def test_realtime_test_page_handles_webrtc_error_and_cleanup_paths() -> None:
     assert "peerConnection.close()" in html
     assert "track.stop()" in html
     assert "remoteAudio.remove()" in html
+    cleanup_block = html.split("function resetRealtimeResources()", 1)[1].split(
+        "async function setupAudioAndPeerConnection",
+        1,
+    )[0]
+    assert "state.clientSecret = null" in cleanup_block
+    assert "state.toolCallToken = null" in cleanup_block
+    assert "state.sessionConfig = null" in cleanup_block
     assert 'writePanel("session-state", "data_channel_closed")' in html
     assert 'writePanel("session-state", "data_channel_error")' in html
     assert "OpenAI SDP exchange failed" in html
