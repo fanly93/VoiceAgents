@@ -1,4 +1,5 @@
 .DS_Store
+.env
 __pycache__/
 *.pyc
 .pytest_cache/
@@ -11,6 +12,7 @@ venv/
 .gstack/
 .gstack-home/
 .voiceagents/
+test-artifacts/
 
 # Repo-local gstack install generated for this working copy.
 .agents/skills/gstack/
