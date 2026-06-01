@@ -27,6 +27,31 @@ def test_realtime_test_page_static_shell_contains_required_controls_and_panels()
     assert 'id="provider-events"' in html
 
 
+def test_realtime_test_page_renders_validation_controls() -> None:
+    html = STATIC_PAGE.read_text(encoding="utf-8")
+
+    assert 'id="validation-scenario"' in html
+    assert 'id="start-validation-run"' in html
+    assert 'id="finish-validation-run"' in html
+    assert 'id="validation-heard-voice"' in html
+    assert 'id="validation-voice-quality"' in html
+    assert 'id="validation-business-answer"' in html
+    assert 'id="validation-demo-ready"' in html
+    assert 'id="validation-notes"' in html
+    assert 'id="validation-run-id"' in html
+    assert 'id="validation-result"' in html
+    assert 'fetch("/v1/realtime/validation-scenarios"' in html
+    assert 'fetch("/v1/realtime/validation-runs"' in html
+    finish_block = html.split("async function finishValidationRun", 1)[1].split(
+        "function parseProviderMessage",
+        1,
+    )[0]
+    assert "clientSecret" not in finish_block
+    assert "toolCallToken" not in finish_block
+    assert "connectionUrl" not in finish_block
+    assert "provider_raw_arguments" not in finish_block
+
+
 def test_realtime_test_page_route_serves_static_page() -> None:
     client = TestClient(create_app())
 

@@ -49,6 +49,14 @@ from voiceagents.realtime.tool_router import (
     RealtimeToolRouter,
     UnknownRealtimeToolError,
 )
+from voiceagents.realtime.validation import (
+    STANDARD_VALIDATION_SCENARIOS,
+    ValidationRunFinishRequest,
+    ValidationRunFinishResponse,
+    ValidationRunRepository,
+    ValidationRunStartRequest,
+    ValidationRunStartResponse,
+)
 
 
 REALTIME_TEST_PAGE_PATH = Path(__file__).parent / "static" / "realtime-test.html"
@@ -61,6 +69,7 @@ def create_app(
     realtime_session_store: InMemoryVoiceSessionStore | None = None,
     realtime_event_repository: VoiceEventRepository | None = None,
     realtime_transcript_repository: RealtimeTranscriptRepository | None = None,
+    realtime_validation_repository: ValidationRunRepository | None = None,
 ) -> FastAPI:
     app = FastAPI(title="VoiceAgents")
     call_flow_service = CallFlowService(
@@ -72,6 +81,7 @@ def create_app(
     session_store = realtime_session_store or InMemoryVoiceSessionStore()
     event_repository = realtime_event_repository or JsonlVoiceEventRepository()
     transcript_repository = realtime_transcript_repository or JsonlRealtimeTranscriptRepository()
+    validation_repository = realtime_validation_repository or ValidationRunRepository()
     tool_router = RealtimeToolRouter(
         session_store=session_store,
         order_adapter=MockOrderAdapter(),
@@ -82,6 +92,7 @@ def create_app(
     app.state.realtime_session_store = session_store
     app.state.realtime_event_repository = event_repository
     app.state.realtime_transcript_repository = transcript_repository
+    app.state.realtime_validation_repository = validation_repository
     app.state.realtime_client_secret_rate_limits = {}
 
     @app.get("/health")
@@ -99,6 +110,29 @@ def create_app(
     @app.get("/static/realtime-openai-adapter.js")
     def realtime_openai_adapter() -> FileResponse:
         return FileResponse(REALTIME_OPENAI_ADAPTER_PATH, media_type="application/javascript")
+
+    @app.get("/v1/realtime/validation-scenarios")
+    def list_realtime_validation_scenarios() -> list:
+        return STANDARD_VALIDATION_SCENARIOS
+
+    @app.post("/v1/realtime/validation-runs")
+    def start_realtime_validation_run(
+        request: ValidationRunStartRequest,
+    ) -> ValidationRunStartResponse:
+        try:
+            return validation_repository.start_run(request)
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+
+    @app.post("/v1/realtime/validation-runs/{run_id}/finish")
+    def finish_realtime_validation_run(
+        run_id: str,
+        request: ValidationRunFinishRequest,
+    ) -> ValidationRunFinishResponse:
+        try:
+            return validation_repository.finish_run(run_id, request)
+        except ValueError as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
 
     @app.post("/v1/realtime/client-secret")
     def create_realtime_client_secret(

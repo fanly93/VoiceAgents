@@ -52,7 +52,8 @@
       }
 
       button,
-      select {
+      select,
+      textarea {
         min-height: 36px;
         border: 1px solid #aab5c8;
         border-radius: 6px;
@@ -88,6 +89,29 @@
         border-color: #d48b20;
         background: #fff8ed;
       }
+
+      .validation-controls {
+        display: grid;
+        gap: 12px;
+      }
+
+      .validation-checks {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+      }
+
+      .validation-checks label {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      textarea {
+        min-height: 72px;
+        padding: 8px 12px;
+        resize: vertical;
+      }
     </style>
   </head>
   <body>
@@ -104,6 +128,26 @@
           </select>
         </div>
       </header>
+
+      <section>
+        <h2>Validation Run</h2>
+        <div class="validation-controls">
+          <div class="toolbar">
+            <select id="validation-scenario" aria-label="Validation scenario"></select>
+            <button id="start-validation-run" type="button">Start Validation Run</button>
+            <button id="finish-validation-run" type="button">Finish Run</button>
+          </div>
+          <div class="validation-checks">
+            <label><input id="validation-heard-voice" type="checkbox" /> Heard voice</label>
+            <label><input id="validation-voice-quality" type="checkbox" /> Voice quality acceptable</label>
+            <label><input id="validation-business-answer" type="checkbox" /> Business answer acceptable</label>
+            <label><input id="validation-demo-ready" type="checkbox" /> Demo ready</label>
+          </div>
+          <textarea id="validation-notes" aria-label="Validation notes"></textarea>
+          <div>Run ID: <span id="validation-run-id">none</span></div>
+          <div id="validation-result" data-panel></div>
+        </div>
+      </section>
 
       <div class="grid">
         <section>
@@ -159,6 +203,12 @@
           assistant: {},
           user: {},
         },
+        validation: {
+          scenarios: [],
+          runId: null,
+          summaryPath: null,
+          reportPath: null,
+        },
       };
 
       const el = (id) => document.getElementById(id);
@@ -209,6 +259,109 @@
         writePanel("latency", "");
         writePanel("provider-events", "");
         state.transcriptBuffers = { assistant: {}, user: {} };
+      }
+
+      async function loadValidationScenarios() {
+        const response = await fetch("/v1/realtime/validation-scenarios");
+        if (!response.ok) {
+          appendPanel("validation-result", `scenario_load_error=${response.status}`);
+          return;
+        }
+        const scenarios = await response.json();
+        state.validation.scenarios = scenarios;
+        const selector = el("validation-scenario");
+        selector.textContent = "";
+        scenarios.forEach((scenario) => {
+          const option = document.createElement("option");
+          option.value = scenario.scenario_id;
+          option.textContent = scenario.label;
+          selector.appendChild(option);
+        });
+        if (scenarios.length > 0 && !selector.value) {
+          selector.value = scenarios[0].scenario_id;
+        }
+      }
+
+      function parseToolNamesFromPanel() {
+        return (el("tool-calls").textContent || "")
+          .split("\n")
+          .map((line) => line.split(":", 1)[0].trim())
+          .filter((name) => name);
+      }
+
+      function parseLatencyValuesFromPanel() {
+        return (el("latency").textContent || "")
+          .split(/\s+/)
+          .map((value) => Number.parseInt(value, 10))
+          .filter((value) => Number.isFinite(value));
+      }
+
+      function currentHandoffReason() {
+        const value = (el("handoff-state").textContent || "").trim();
+        return value && value !== "none" ? value : null;
+      }
+
+      async function startValidationRun() {
+        const response = await fetch("/v1/realtime/validation-runs", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            scenario_id: el("validation-scenario").value,
+            session_id: state.sessionId || "manual-session",
+            call_id: state.callId || "manual-call",
+            merchant_id: "merchant-demo",
+            provider: state.provider || "mock",
+            response_mode: el("response-mode").value,
+            locale: navigator.language || "en-US",
+          }),
+        });
+        if (!response.ok) {
+          appendPanel("validation-result", `start_error=${response.status}`);
+          return null;
+        }
+        const payload = await response.json();
+        state.validation.runId = payload.run_id;
+        state.validation.summaryPath = payload.summary_path;
+        state.validation.reportPath = payload.report_path;
+        writePanel("validation-run-id", payload.run_id);
+        writePanel("validation-result", `started ${payload.run_id}`);
+        return payload;
+      }
+
+      async function finishValidationRun() {
+        if (!state.validation.runId) {
+          appendPanel("validation-result", "finish_error=no_active_validation_run");
+          return null;
+        }
+        const response = await fetch(`/v1/realtime/validation-runs/${state.validation.runId}/finish`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            session_state: el("session-state").textContent || "unknown",
+            transcript_text: el("transcript").textContent || "",
+            assistant_response_text: el("assistant-response").textContent || "",
+            tool_names: parseToolNamesFromPanel(),
+            handoff_reason: currentHandoffReason(),
+            provider_events: (el("provider-events").textContent || "").split("\n").filter((line) => line),
+            latency_ms_values: parseLatencyValuesFromPanel(),
+            manual_assertions: {
+              heard_voice: el("validation-heard-voice").checked,
+              voice_quality_acceptable: el("validation-voice-quality").checked,
+              business_answer_acceptable: el("validation-business-answer").checked,
+              demo_ready: el("validation-demo-ready").checked,
+              notes: el("validation-notes").value || "",
+            },
+          }),
+        });
+        if (!response.ok) {
+          appendPanel("validation-result", `finish_error=${response.status}`);
+          return null;
+        }
+        const payload = await response.json();
+        state.validation.summaryPath = payload.summary_path;
+        state.validation.reportPath = payload.report_path;
+        writePanel("validation-result", `saved ${payload.status} ${payload.report_path}`);
+        return payload;
       }
 
       function parseProviderMessage(data) {
@@ -648,13 +801,34 @@
         appendPanel("provider-events", state.isMuted ? "mute_state=muted" : "mute_state=unmuted");
       });
       el("response-mode").addEventListener("change", updateRealtimeResponseMode);
+      el("start-validation-run").addEventListener("click", () => {
+        startValidationRun().catch((error) => {
+          appendPanel("validation-result", error.message);
+        });
+      });
+      el("finish-validation-run").addEventListener("click", () => {
+        finishValidationRun().catch((error) => {
+          appendPanel("validation-result", error.message);
+        });
+      });
+      loadValidationScenarios().catch((error) => {
+        appendPanel("validation-result", error.message);
+      });
 
       window.voiceAgentsRealtimeTest = {
+        loadValidationScenarios,
+        startValidationRun,
+        finishValidationRun,
         relayToolCall,
         relayNormalizedEvent,
         handleProviderEvent,
         connectOpenAIRealtime,
         resetRealtimeResources,
+        setDebugSession: (debugSession) => {
+          state.sessionId = debugSession.sessionId;
+          state.callId = debugSession.callId;
+          state.provider = debugSession.provider;
+        },
         getSessionConfig: () => state.sessionConfig,
         getDebugState: () => ({
           activeConnectionId: state.activeConnectionId,
