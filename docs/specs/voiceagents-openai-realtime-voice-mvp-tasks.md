@@ -1,8 +1,18 @@
 # VoiceAgents 真实语音接入 MVP Tasks
 
-Status: DRAFT
+Status: IMPLEMENTED / MERGED
 Source spec: `docs/specs/voiceagents-openai-realtime-voice-mvp.md`
-Branch: `feat/openai-realtime-voice-mvp`
+Branch: `main` after PR #4 merge; implemented on `feat/openai-realtime-voice-mvp`
+Post-merge archive update: 2026-06-01
+
+Post-merge completion summary:
+
+- PR #4 merged into `main` as `35f16a9 OpenAI Realtime voice MVP`.
+- Full test suite passed after merge: `./.venv/bin/python -m pytest` -> `162 passed, 1 warning`.
+- Mock-mode smoke passed after merge for HTTP scenarios and realtime tool relay.
+- Real OpenAI browser validation passed for 3+ minute conversation, Text/Voice mode behavior, Mute/Unmute, product knowledge hit, low-confidence handoff, and structured log safety.
+- `lookup_order` and `lookup_logistics` real-mode retest are scoped waivers by user decision; both remain covered by mock/API/pytest and realistic fixture data.
+- Browser failure-mode checks for permission denial, client-secret failure, SDP exchange failure, data channel close/error, and reconnect after failure are deferred.
 
 Rules:
 
@@ -957,8 +967,9 @@ Inputs:
 Outputs:
 
 - Manual verification notes
-- Evidence that four tools can be triggered
+- Evidence that in-scope real-mode tools can be triggered
 - Evidence that logs are redacted and contain no blocked data
+- Post-merge note: user waived real-mode retest for `lookup_order` and `lookup_logistics`; mock/API/pytest coverage remains the acceptance evidence for those two tools in this checkpoint
 
 Validation:
 
@@ -987,6 +998,7 @@ Required outputs:
 - Stop cleanup verified
 - Mute behavior verified
 - reconnect after failure verified
+- Post-merge note: Stop cleanup and Mute were manually covered; the remaining browser failure-mode paths are deferred to a future verification task
 
 Validation:
 
@@ -1010,5 +1022,5 @@ Outputs:
 Validation:
 
 ```text
-$gstack-review completed on feature branch before merge.
+$gstack-review completed on feature branch before merge; findings were fixed before PR #4 merge.
 ```

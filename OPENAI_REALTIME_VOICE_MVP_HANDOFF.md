@@ -4,7 +4,8 @@
 
 ## 当前任务
 
-当前分支正在推进 VoiceAgents OpenAI Realtime 真实语音接入 MVP。
+VoiceAgents OpenAI Realtime 真实语音接入 MVP 已通过 PR #4 合并到 `main`。
+本文档现在作为 post-merge archive handoff，记录已落地范围、验收证据、豁免项和后续延期项。
 
 目标是在现有文本智能客服和 browser/local realtime plumbing 基础上，提供一个研发测试可用的真实语音 MVP：
 
@@ -17,22 +18,39 @@
 
 ## 当前 Git 状态
 
-当前分支：
+已合并基线：
 
 ```bash
-feat/openai-realtime-voice-mvp
+main / origin/main
 ```
 
-当前工作区状态：
+合并记录：
+
+```text
+PR #4: https://github.com/fanly93/VoiceAgents/pull/4
+Merge commit: 35f16a9 OpenAI Realtime voice MVP
+Merged at: 2026-06-01
+```
+
+当前归档 checkpoint 分支：
 
 ```bash
-git status --short
-# clean
+docs/post-merge-realtime-archive
+```
+
+checkpoint 开始前工作区状态：
+
+```bash
+git status --short --branch
+# ## main...origin/main
 ```
 
 最近关键提交：
 
 ```bash
+35f16a9 OpenAI Realtime voice MVP
+6bc1b56 Merge pull request #3 from fanly93/docs/gstack-review-before-merge
+cc4f1e4 docs: clarify gstack review timing
 383d24b test: use realistic realtime validation fixtures
 237de6c docs: refresh realtime voice MVP handoff
 4710473 feat: add realtime browser adapter and controls
@@ -42,7 +60,7 @@ c22b06d feat: wire realtime provider event ingest and logs
 e89f632 feat: add realtime event contracts
 ```
 
-本阶段已经从文档阶段推进到主体实现完成。自动化测试已通过；真实 OpenAI 语音手动验收的核心路径已经完成，订单/物流真实模式重测按用户确认改为 scoped waiver，failure-mode 仍需按下方矩阵补齐或明确延期。
+本阶段已经从文档阶段推进到合并归档阶段。自动化测试和 mock smoke 已通过；真实 OpenAI 语音手动验收的核心路径已经完成。订单/物流真实模式重测按用户确认改为 scoped waiver，failure-mode 剩余浏览器异常路径延期到后续验证轮次。
 
 ## 重要项目规范
 
@@ -157,7 +175,7 @@ tests/fixtures/openai_realtime_events.json
 
 ```bash
 ./.venv/bin/python -m pytest
-# 161 passed, 1 warning
+# 162 passed, 1 warning
 ```
 
 重点测试覆盖：
@@ -174,7 +192,21 @@ tests/fixtures/openai_realtime_events.json
 - browser adapter event mapping
 - realtime test page controls and cleanup paths
 
-## 当前明确未完成内容
+合并后补充 smoke 验证：
+
+```bash
+NO_PROXY=127.0.0.1,localhost no_proxy=127.0.0.1,localhost \
+./.venv/bin/python scripts/smoke_api.py --base-url http://127.0.0.1:8001
+# health ok; customer-requests-human, logistics-tracking, low-asr-confidence,
+# order-status, product-usage scenarios passed
+
+NO_PROXY=127.0.0.1,localhost no_proxy=127.0.0.1,localhost \
+./.venv/bin/python scripts/smoke_realtime_api.py --base-url http://127.0.0.1:8001
+# health ok; mock client-secret; lookup_order, lookup_logistics,
+# query_product_knowledge, handoff_to_human passed; auth/tool rejection passed
+```
+
+## 合并后状态与延期项
 
 状态：
 
@@ -185,15 +217,13 @@ tests/fixtures/openai_realtime_events.json
 - 已完成：`query_product_knowledge` 低置信结果触发 `handoff_to_human`。
 - 已完成：当前 real-mode session 的 JSONL 日志安全抽查，未发现 `client_secret`、`tool_call_token`、Authorization、SDP、raw audio 或未脱敏 transcript。
 - Scoped waiver：用户确认不再继续手测 `lookup_order` 和 `lookup_logistics` 真实模式重测；这两条路径由 mock/API/pytest 覆盖，并已替换为真实感合成订单号 `ORD-20260601-1842`。
-- 待补齐或明确延期：浏览器 failure-mode 手动验证：
+- 已完成：`$gstack-review` merge 前审查、review findings 修复、push、PR、merge。
+- 延期：浏览器 failure-mode 手动验证：
   - microphone permission denied
   - client-secret failure
   - SDP exchange failure
   - data channel close/error
   - reconnect after failure
-- `$gstack-review` merge 前审查。
-- review findings 修复。
-- push / PR / merge。
 
 ## 2026-06-01 Real-Mode 手动验收记录
 
@@ -288,11 +318,9 @@ http://127.0.0.1:8000/realtime-test
 
 当前最优下一步：
 
-1. 提交本次 handoff/checklist/spec/code-drift 修复。
-2. 按需补测或明确延期 failure-mode 剩余项目。
-3. 运行 `$gstack-review`。
-4. 修复 review findings。
-5. push / PR / merge。
+1. 提交本次 post-merge archive 文档归档 checkpoint。
+2. 进入下一阶段前，按需补测 failure-mode 剩余项目，或在新 task 中继续保持 deferred 状态。
+3. 若开启新需求，从干净 `main` 新建 feature branch，并继续小步 checkpoint。
 
 ## 推荐新会话开局命令
 
