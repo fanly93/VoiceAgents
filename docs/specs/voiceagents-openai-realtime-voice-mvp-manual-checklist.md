@@ -66,7 +66,7 @@ Notes:
 
 ## Recorded Verification - 2026-06-01
 
-Post-merge archive note: PR #4 was merged with the PASS/WAIVED/TODO split below. The two waived order/logistics real-mode retests are intentionally not blocking this checkpoint because mock/API/pytest cover those tool paths with realistic fixture data. Remaining browser failure-mode TODOs are deferred, not silently considered passed.
+Post-merge archive note: PR #4 was merged with the PASS/WAIVED/TODO split below. The two waived order/logistics real-mode retests are intentionally not blocking this checkpoint because mock/API/pytest cover those tool paths with realistic fixture data. The browser failure-mode TODOs have since been covered by automated simulation in this branch.
 
 ```text
 Manual OpenAI realtime verification: PARTIAL PASS
@@ -87,12 +87,28 @@ Log safety checked: PASS for the current structured JSONL sample; no client_secr
 Failure-mode checks:
 - Stop cleanup: PASS by manual flow
 - Mute: PASS by manual flow
-- Microphone permission denial: TODO or defer
-- Client-secret failure: TODO or defer
-- SDP exchange failure: TODO or defer
-- Data channel close/error: TODO or defer
-- Reconnect after failure: TODO or defer
-Notes: This record intentionally distinguishes PASS, WAIVED, and TODO items so merge review can decide whether the remaining browser failure-mode checks block landing.
+- Microphone permission denial: AUTOMATED SIMULATION PASS in `tests/test_realtime_test_page_failure_modes.py`
+- Client-secret failure: AUTOMATED SIMULATION PASS in `tests/test_realtime_test_page_failure_modes.py`
+- SDP exchange failure: AUTOMATED SIMULATION PASS in `tests/test_realtime_test_page_failure_modes.py`
+- Data channel close/error: AUTOMATED SIMULATION PASS in `tests/test_realtime_test_page_failure_modes.py`
+- Reconnect after failure: AUTOMATED SIMULATION PASS in `tests/test_realtime_test_page_failure_modes.py`
+Notes: This record intentionally distinguishes real-mode PASS, scoped WAIVED, and later automated simulation coverage.
 ```
 
 Latency note: the `/realtime-test` Latency panel currently displays the latest client-secret/start or tool/event relay timing. It is not an end-to-end voice response latency metric.
+
+## Recorded Failure-Mode Automation - 2026-06-01
+
+```text
+Failure-mode automation: PASS
+Date: 2026-06-01
+Environment: isolated .venv313, Node.js browser-JS harness
+Command: ./.venv313/bin/python -m pytest tests/test_realtime_test_page_failure_modes.py -q
+Coverage:
+- client-secret failure returns a safe visible error and does not request microphone or allocate WebRTC resources
+- microphone permission denial shows an error, clears secret-bearing state, and does not call the OpenAI SDP endpoint
+- SDP exchange failure closes peer connection, stops local tracks, removes remote audio, and clears secret-bearing state
+- data channel close/error updates visible Session State
+- Start after failure allocates a fresh session id and fresh WebRTC resources
+Notes: This is automated simulation coverage for the `/realtime-test` browser logic. It does not require a real OpenAI API key or real microphone permission changes.
+```

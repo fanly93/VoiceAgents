@@ -12,7 +12,7 @@ Post-merge completion summary:
 - Mock-mode smoke passed after merge for HTTP scenarios and realtime tool relay.
 - Real OpenAI browser validation passed for 3+ minute conversation, Text/Voice mode behavior, Mute/Unmute, product knowledge hit, low-confidence handoff, and structured log safety.
 - `lookup_order` and `lookup_logistics` real-mode retest are scoped waivers by user decision; both remain covered by mock/API/pytest and realistic fixture data.
-- Browser failure-mode checks for permission denial, client-secret failure, SDP exchange failure, data channel close/error, and reconnect after failure are deferred.
+- Browser failure-mode checks for permission denial, client-secret failure, SDP exchange failure, data channel close/error, and reconnect after failure have automated simulation coverage in `tests/test_realtime_test_page_failure_modes.py`; real-browser/manual rechecks remain optional follow-up.
 
 Rules:
 
@@ -998,7 +998,7 @@ Required outputs:
 - Stop cleanup verified
 - Mute behavior verified
 - reconnect after failure verified
-- Post-merge note: Stop cleanup and Mute were manually covered; the remaining browser failure-mode paths are deferred to a future verification task
+- Post-merge note: Stop cleanup and Mute were manually covered; the remaining browser failure-mode paths are now covered by automated simulation in `tests/test_realtime_test_page_failure_modes.py`
 
 Validation:
 
