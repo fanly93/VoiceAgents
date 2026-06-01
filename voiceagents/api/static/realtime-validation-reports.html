@@ -207,6 +207,12 @@
         runList: document.getElementById("run-list"),
         emptyState: document.getElementById("empty-state"),
         errorState: document.getElementById("error-state"),
+        readinessBanner: document.getElementById("readiness-banner"),
+        scenarioCoverage: document.getElementById("scenario-coverage"),
+        businessProof: document.getElementById("business-proof"),
+        audienceSections: document.getElementById("audience-sections"),
+        warnings: document.getElementById("warnings"),
+        copySummary: document.getElementById("copy-summary"),
       };
 
       function setHidden(element, hidden) {
@@ -222,6 +228,9 @@
           state.runs = await response.json();
           state.error = null;
           renderRunList();
+          if (state.runs.length > 0) {
+            await loadReport(state.runs[0].run_id);
+          }
           return state.runs;
         } catch (error) {
           state.runs = [];
@@ -242,15 +251,67 @@
           button.textContent = `${run.scenario_label} · ${run.readiness}`;
           button.setAttribute("data-run-id", run.run_id);
           button.setAttribute("aria-selected", run.run_id === state.selectedRunId ? "true" : "false");
+          button.addEventListener("click", () => {
+            loadReport(run.run_id);
+          });
           elements.runList.appendChild(button);
         }
         setHidden(elements.emptyState, state.runs.length !== 0);
         setHidden(elements.errorState, true);
       }
 
+      async function loadReport(runId) {
+        const response = await fetch(`/v1/realtime/validation-report-runs/${runId}`);
+        if (!response.ok) {
+          throw new Error(`Failed to load report: ${response.status}`);
+        }
+        state.selectedRunId = runId;
+        state.report = await response.json();
+        renderRunList();
+        renderReport(state.report);
+        return state.report;
+      }
+
+      function renderReport(report) {
+        elements.readinessBanner.className = `banner ${report.readiness}`;
+        elements.readinessBanner.textContent = `${report.decision_summary.label} · ${report.scenario.label}`;
+        renderList(elements.scenarioCoverage, report.scenario_coverage);
+        renderList(elements.businessProof, report.business_proof);
+        renderAudienceSections(report.audience_sections);
+        renderList(elements.warnings, report.warnings.length ? report.warnings : ["暂无失败检查项。"]);
+        elements.copySummary.value = report.copy_summary.text;
+      }
+
+      function renderList(target, items) {
+        target.replaceChildren(
+          ...items.map((item) => {
+            const row = document.createElement("li");
+            row.textContent = item;
+            return row;
+          })
+        );
+      }
+
+      function renderAudienceSections(sections) {
+        elements.audienceSections.replaceChildren(
+          ...sections.map((section) => {
+            const article = document.createElement("article");
+            const heading = document.createElement("h3");
+            const list = document.createElement("ul");
+            heading.textContent = `${section.audience}：${section.title}`;
+            renderList(list, section.bullets);
+            article.appendChild(heading);
+            article.appendChild(list);
+            return article;
+          })
+        );
+      }
+
       window.voiceAgentsValidationReports = {
         loadRuns,
+        loadReport,
         renderRunList,
+        renderReport,
         getState: () => ({ ...state }),
       };
     </script>

@@ -35,6 +35,25 @@ def test_load_runs_renders_error_state() -> None:
     )
 
 
+@pytest.mark.skipif(shutil.which("node") is None, reason="node is required for browser JS harness")
+def test_render_report_detail_loads_selected_run() -> None:
+    run_report_harness(
+        r"""
+  fetchMode = "report";
+  await api.loadRuns();
+
+  assert(fetchCalls[1].url === "/v1/realtime/validation-report-runs/vrun-20260601-120000-abcdef12", "detail endpoint should be fetched");
+  assert(document.getElementById("readiness-banner").textContent.includes("可以继续推进试点"), "readiness should render");
+  assert(document.getElementById("scenario-coverage").children.length === 2, "scenario coverage should render");
+  assert(flattenText(document.getElementById("business-proof")).includes("业务回答：通过"), "business proof should render");
+  assert(flattenText(document.getElementById("audience-sections")).includes("老板"), "boss section should render");
+  assert(flattenText(document.getElementById("audience-sections")).includes("客服主管"), "support lead section should render");
+  assert(flattenText(document.getElementById("audience-sections")).includes("技术同事"), "technical section should render");
+  assert(flattenText(document.getElementById("warnings")).includes("manual_business_confirmed"), "warnings should render");
+"""
+    )
+
+
 def run_report_harness(assertions: str) -> None:
     script = (
         r"""
@@ -63,6 +82,41 @@ const response = ({ ok = true, status = 200, json = [] }) => ({
 const elements = new Map();
 const fetchCalls = [];
 let fetchMode = "empty";
+const reportRun = {
+  run_id: "vrun-20260601-120000-abcdef12",
+  scenario_label: "Order status lookup",
+  readiness: "ready_for_pilot",
+  status: "pass",
+  finished_at: "2026-06-01T12:01:00+00:00",
+};
+const reportDetail = {
+  run_id: "vrun-20260601-120000-abcdef12",
+  scenario: { scenario_id: "order_status", label: "Order status lookup" },
+  status: "fail",
+  readiness: "needs_another_validation",
+  decision_summary: {
+    label: "可以继续推进试点",
+    summary: "订单状态查询场景验证结果为：可以继续推进试点。",
+    next_action: "可把本摘要转发给决策人，进入试点准备。",
+  },
+  scenario_coverage: ["验证场景：订单状态查询", "预期工具：lookup_order"],
+  business_proof: ["语音确认：通过", "业务回答：通过"],
+  audience_sections: [
+    { audience: "老板", title: "决策人摘要", bullets: ["结论：可以继续推进试点"] },
+    { audience: "客服主管", title: "客服主管关注点", bullets: ["业务回答可接受"] },
+    { audience: "技术同事", title: "技术复核点", bullets: ["检查项：9/10 通过"] },
+  ],
+  copy_summary: {
+    text: "试点演示验证结果：订单状态查询，可以继续推进试点。\n证据：业务回答：通过。\n下一步：进入试点准备。",
+  },
+  checks: [],
+  warnings: ["manual_business_confirmed: manual business/demo checks failed"],
+};
+
+const flattenText = (element) => {
+  const childText = (element.children || []).map(flattenText).join(" ");
+  return `${element.textContent || ""} ${childText}`.trim();
+};
 
 class FakeClassList {
   constructor() {
@@ -135,6 +189,12 @@ const context = {
     fetchCalls.push({ url: String(url) });
     if (fetchMode === "error") {
       return response({ ok: false, status: 500 });
+    }
+    if (fetchMode === "report" && String(url).endsWith("/vrun-20260601-120000-abcdef12")) {
+      return response({ json: reportDetail });
+    }
+    if (fetchMode === "report") {
+      return response({ json: [reportRun] });
     }
     return response({ json: [] });
   },
