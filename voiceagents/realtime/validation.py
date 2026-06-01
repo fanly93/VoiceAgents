@@ -36,6 +36,9 @@ BLOCKED_REPORT_FIELD_NAMES = tuple(
         reverse=True,
     )
 )
+BLOCKED_REPORT_FIELD_NAME_KEYS = frozenset(
+    token.lower().replace("-", "_") for token in BLOCKED_REPORT_FIELD_NAMES
+)
 BLOCKED_REPORT_TEXT_TOKENS = tuple(
     token
     for token in BLOCKED_REPORT_FIELD_NAMES
@@ -403,8 +406,26 @@ def _scrub_blocked_tokens(value):
 def _blocked_secret_scan(payload: dict[str, object]) -> bool:
     if find_blocked_event_keys(payload):
         return False
-    serialized = json.dumps(payload, ensure_ascii=False)
-    return not any(token in serialized for token in BLOCKED_REPORT_FIELD_NAMES)
+    return not _contains_blocked_report_key_or_text(payload)
+
+
+def _contains_blocked_report_key_or_text(value: object) -> bool:
+    if isinstance(value, dict):
+        for key, nested in value.items():
+            normalized_key = key.lower().replace("-", "_")
+            if normalized_key in BLOCKED_REPORT_FIELD_NAME_KEYS:
+                return True
+            if _contains_blocked_report_key_or_text(nested):
+                return True
+        return False
+    if isinstance(value, list):
+        return any(_contains_blocked_report_key_or_text(item) for item in value)
+    if isinstance(value, str):
+        return any(
+            re.search(re.escape(token), value, flags=re.IGNORECASE)
+            for token in BLOCKED_REPORT_TEXT_TOKENS
+        )
+    return False
 
 
 def _render_report(summary: ValidationRunSummary) -> str:
