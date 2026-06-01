@@ -62,6 +62,8 @@ e89f632 feat: add realtime event contracts
 
 本阶段已经从文档阶段推进到合并归档阶段。自动化测试和 mock smoke 已通过；真实 OpenAI 语音手动验收的核心路径已经完成。订单/物流真实模式重测按用户确认改为 scoped waiver，浏览器 failure-mode 异常路径已在 PR #6 中补充自动化模拟覆盖。
 
+当前后续功能分支 `feat/product-cut-discovery` 已新增 Pilot Validation Harness v1，用于把 `/realtime-test` 的真实语音验证过程保存为本地脱敏报告。该功能仍是本地研发/试点验证工具，不是商家后台、客服后台或生产审计系统。
+
 ## 重要项目规范
 
 本项目使用项目级 gstack，规则在 `AGENTS.md`。
@@ -169,6 +171,45 @@ voiceagents/api/static/realtime-openai-adapter.js
 tests/fixtures/openai_realtime_events.json
 ```
 
+### 3.5 Pilot Validation Harness v1
+
+当前 feature branch 已实现：
+
+- `/v1/realtime/validation-scenarios` 返回五个固定试点验证场景。
+- `/v1/realtime/validation-runs` 创建 server-generated `run_id`。
+- `/v1/realtime/validation-runs/{run_id}/finish` 保存本地脱敏验证结果。
+- `/realtime-test` 增加 Validation Run 区域：
+  - scenario selector
+  - `Start Validation Run`
+  - `Finish Run`
+  - heard voice / voice quality / business answer / demo ready / notes
+  - visible `run_id`
+  - saved report confirmation
+- 保存路径：
+
+```text
+.voiceagents/validation-runs/<run_id>/summary.json
+.voiceagents/validation-runs/<run_id>/report.md
+```
+
+安全边界：
+
+- `.voiceagents/validation-runs/` 是本地 gitignored 输出，不提交。
+- 后端生成并校验 `run_id`，客户端不能选择 filesystem path。
+- 保存前对 transcript、assistant response、handoff、provider events 和 notes 做脱敏/blocked-token 清洗。
+- 不保存 raw audio、SDP、OpenAI API key、client secret、tool token、Authorization header、raw tool arguments 或真实 PII。
+
+主要文件：
+
+```text
+voiceagents/realtime/validation.py
+voiceagents/api/app.py
+voiceagents/api/static/realtime-test.html
+tests/test_realtime_validation.py
+tests/test_api_realtime_validation.py
+tests/test_realtime_test_page_validation_flow.py
+```
+
 ### 4. 自动化测试
 
 已通过全量测试：
@@ -197,6 +238,13 @@ tests/fixtures/openai_realtime_events.json
   - SDP exchange failure cleanup
   - data channel close/error
   - reconnect after failure
+- Pilot Validation Harness v1:
+  - fixed scenario catalog
+  - strict validation run contracts
+  - path-safe local report repository
+  - redacted `summary.json` / `report.md`
+  - validation API endpoints
+  - `/realtime-test` validation browser flow
 
 合并后补充 smoke 验证：
 

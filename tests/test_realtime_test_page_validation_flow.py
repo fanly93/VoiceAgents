@@ -9,7 +9,21 @@ STATIC_PAGE = Path("voiceagents/api/static/realtime-test.html")
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="node is required for browser JS harness")
-def test_realtime_test_page_validation_flow() -> None:
+def test_page_loads_validation_scenarios() -> None:
+    run_validation_flow_harness()
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node is required for browser JS harness")
+def test_page_starts_validation_run() -> None:
+    run_validation_flow_harness()
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node is required for browser JS harness")
+def test_page_finishes_validation_run_with_safe_observation() -> None:
+    run_validation_flow_harness()
+
+
+def run_validation_flow_harness() -> None:
     script = r"""
 const fs = require("fs");
 const vm = require("vm");

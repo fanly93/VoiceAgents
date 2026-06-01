@@ -1,6 +1,6 @@
 # VoiceAgents Pilot Validation Harness v1 Spec
 
-Status: DRAFT
+Status: IMPLEMENTED
 Date: 2026-06-01
 Branch: `feat/product-cut-discovery`
 Source design: `docs/designs/voiceagents-pilot-validation-harness-v1.md`
@@ -250,4 +250,3 @@ Follow existing patterns:
 - tests use `tmp_path` for filesystem writes;
 - `/realtime-test` static tests assert control and safety behavior;
 - browser JS behavior can use the existing Node/vm harness style from `tests/test_realtime_test_page_failure_modes.py`.
-
