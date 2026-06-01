@@ -9,6 +9,19 @@ STATIC_PAGE = Path("voiceagents/api/static/realtime-validation-reports.html")
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="node is required for browser JS harness")
+def test_page_auto_loads_runs_on_script_execution() -> None:
+    run_report_harness(
+        r"""
+  await api.getAutoLoadPromise();
+
+  assert(fetchCalls[0].url === "/v1/realtime/validation-report-runs", "page should auto-load run list");
+  assert(document.getElementById("empty-state").classList.hidden === false, "auto-load should render empty state");
+""",
+        auto_load=True,
+    )
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node is required for browser JS harness")
 def test_load_runs_renders_empty_state() -> None:
     run_report_harness(
         r"""
@@ -36,6 +49,20 @@ def test_load_runs_renders_error_state() -> None:
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="node is required for browser JS harness")
+def test_load_runs_keeps_list_and_renders_error_when_detail_fails() -> None:
+    run_report_harness(
+        r"""
+  fetchMode = "detailError";
+  await api.loadRuns();
+
+  assert(document.getElementById("run-list").children.length === 1, "run list should remain visible");
+  assert(document.getElementById("error-state").classList.hidden === false, "detail error should be visible");
+  assert(document.getElementById("readiness-banner").textContent.includes("报告加载失败"), "detail panel should show failure");
+"""
+    )
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node is required for browser JS harness")
 def test_render_report_detail_loads_selected_run() -> None:
     run_report_harness(
         r"""
@@ -44,6 +71,7 @@ def test_render_report_detail_loads_selected_run() -> None:
 
   assert(fetchCalls[1].url === "/v1/realtime/validation-report-runs/vrun-20260601-120000-abcdef12", "detail endpoint should be fetched");
   assert(document.getElementById("readiness-banner").textContent.includes("可以继续推进试点"), "readiness should render");
+  assert(document.getElementById("readiness-banner").className.includes("ready_for_pilot"), "banner class should match readiness");
   assert(document.getElementById("scenario-coverage").children.length === 2, "scenario coverage should render");
   assert(flattenText(document.getElementById("business-proof")).includes("业务回答：通过"), "business proof should render");
   assert(flattenText(document.getElementById("audience-sections")).includes("老板"), "boss section should render");
@@ -71,7 +99,7 @@ def test_copy_summary_copies_chinese_forwardable_text() -> None:
     )
 
 
-def run_report_harness(assertions: str) -> None:
+def run_report_harness(assertions: str, *, auto_load: bool = False) -> None:
     script = (
         r"""
 const fs = require("fs");
@@ -110,8 +138,8 @@ const reportRun = {
 const reportDetail = {
   run_id: "vrun-20260601-120000-abcdef12",
   scenario: { scenario_id: "order_status", label: "Order status lookup" },
-  status: "fail",
-  readiness: "needs_another_validation",
+  status: "pass",
+  readiness: "ready_for_pilot",
   decision_summary: {
     label: "可以继续推进试点",
     summary: "订单状态查询场景验证结果为：可以继续推进试点。",
@@ -200,13 +228,19 @@ const document = {
 };
 
 const context = {
-  window: {},
+  window: { voiceAgentsValidationReportsDisableAutoLoad: """ + ("false" if auto_load else "true") + r""" },
   document,
   navigator: { clipboard: { writeText: async (text) => { copiedText = text; } } },
   fetch: async (url) => {
     fetchCalls.push({ url: String(url) });
     if (fetchMode === "error") {
       return response({ ok: false, status: 500 });
+    }
+    if (fetchMode === "detailError" && String(url).endsWith("/vrun-20260601-120000-abcdef12")) {
+      return response({ ok: false, status: 404 });
+    }
+    if (fetchMode === "detailError") {
+      return response({ json: [reportRun] });
     }
     if (fetchMode === "report" && String(url).endsWith("/vrun-20260601-120000-abcdef12")) {
       return response({ json: reportDetail });

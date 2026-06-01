@@ -202,6 +202,7 @@
         report: null,
         error: null,
       };
+      let autoLoadPromise = Promise.resolve([]);
 
       const elements = {
         runList: document.getElementById("run-list"),
@@ -262,15 +263,28 @@
       }
 
       async function loadReport(runId) {
-        const response = await fetch(`/v1/realtime/validation-report-runs/${runId}`);
-        if (!response.ok) {
-          throw new Error(`Failed to load report: ${response.status}`);
+        try {
+          const response = await fetch(`/v1/realtime/validation-report-runs/${runId}`);
+          if (!response.ok) {
+            throw new Error(`Failed to load report: ${response.status}`);
+          }
+          state.selectedRunId = runId;
+          state.report = await response.json();
+          state.error = null;
+          renderRunList();
+          renderReport(state.report);
+          setHidden(elements.errorState, true);
+          return state.report;
+        } catch (error) {
+          state.selectedRunId = runId;
+          state.report = null;
+          state.error = error;
+          renderRunList();
+          renderReportError("报告加载失败，请重新选择或重新验证。");
+          setHidden(elements.emptyState, true);
+          setHidden(elements.errorState, false);
+          return null;
         }
-        state.selectedRunId = runId;
-        state.report = await response.json();
-        renderRunList();
-        renderReport(state.report);
-        return state.report;
       }
 
       function renderReport(report) {
@@ -281,6 +295,16 @@
         renderAudienceSections(report.audience_sections);
         renderList(elements.warnings, report.warnings.length ? report.warnings : ["暂无失败检查项。"]);
         elements.copySummary.value = report.copy_summary.text;
+      }
+
+      function renderReportError(message) {
+        elements.readinessBanner.className = "banner blocked";
+        elements.readinessBanner.textContent = message;
+        elements.scenarioCoverage.replaceChildren();
+        elements.businessProof.replaceChildren();
+        elements.audienceSections.replaceChildren();
+        elements.warnings.replaceChildren();
+        elements.copySummary.value = "";
       }
 
       function renderList(target, items) {
@@ -329,8 +353,13 @@
         renderRunList,
         renderReport,
         copySummary,
+        getAutoLoadPromise: () => autoLoadPromise,
         getState: () => ({ ...state }),
       };
+
+      if (!window.voiceAgentsValidationReportsDisableAutoLoad) {
+        autoLoadPromise = loadRuns();
+      }
     </script>
   </body>
 </html>
