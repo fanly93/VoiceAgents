@@ -117,3 +117,22 @@ def test_finish_validation_run_rejects_path_like_run_id(tmp_path) -> None:
     )
 
     assert response.status_code in {400, 404, 422}
+
+
+def test_validation_report_runs_endpoint_lists_saved_runs(tmp_path) -> None:
+    client = make_client(tmp_path)
+    started = client.post("/v1/realtime/validation-runs", json=make_start_payload()).json()
+    client.post(
+        f"/v1/realtime/validation-runs/{started['run_id']}/finish",
+        json=make_finish_payload(),
+    )
+
+    response = client.get("/v1/realtime/validation-report-runs")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert [run["run_id"] for run in body] == [started["run_id"]]
+    assert body[0]["scenario_label"] == "Order status lookup"
+    assert body[0]["readiness"] == "ready_for_pilot"
+    assert "summary_path" not in body[0]
+    assert "report_path" not in body[0]
