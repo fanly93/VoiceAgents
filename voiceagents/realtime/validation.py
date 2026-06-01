@@ -202,6 +202,25 @@ class ValidationRunFinishResponse(BaseModel):
     checks: list[ValidationCheck]
 
 
+ValidationReportReadiness = Literal["ready_for_pilot", "needs_another_validation", "blocked"]
+
+
+def derive_validation_report_readiness(
+    summary: ValidationRunSummary,
+) -> ValidationReportReadiness:
+    failed_critical_checks = {
+        check.name
+        for check in summary.checks
+        if not check.passed
+        and check.name in {"provider_errors_absent", "blocked_secret_scan_passed"}
+    }
+    if failed_critical_checks:
+        return "blocked"
+    if summary.status == "pass" and all(check.passed for check in summary.checks):
+        return "ready_for_pilot"
+    return "needs_another_validation"
+
+
 def evaluate_validation_checks(
     scenario: ValidationScenario,
     request: ValidationRunFinishRequest,

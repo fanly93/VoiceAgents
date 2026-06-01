@@ -12,6 +12,7 @@ from voiceagents.realtime.validation import (
     ValidationRunRepository,
     ValidationRunStartRequest,
     ValidationRunSummary,
+    derive_validation_report_readiness,
     evaluate_validation_checks,
 )
 
@@ -47,6 +48,51 @@ def make_finish_request(**updates: object) -> ValidationRunFinishRequest:
     }
     payload.update(updates)
     return ValidationRunFinishRequest.model_validate(payload)
+
+
+def make_summary(**updates: object) -> ValidationRunSummary:
+    payload = {
+        "run_id": "vrun-20260601-120000-abcdef12",
+        "scenario_id": "order_status",
+        "status": "pass",
+        "started_at": "2026-06-01T12:00:00+00:00",
+        "finished_at": "2026-06-01T12:01:00+00:00",
+        "summary_path": ".voiceagents/validation-runs/vrun-20260601-120000-abcdef12/summary.json",
+        "report_path": ".voiceagents/validation-runs/vrun-20260601-120000-abcdef12/report.md",
+        "checks": evaluate_validation_checks(STANDARD_VALIDATION_SCENARIOS[0], make_finish_request()),
+        "manual_assertions": {
+            "heard_voice": True,
+            "voice_quality_acceptable": True,
+            "business_answer_acceptable": True,
+            "demo_ready": True,
+            "notes": "clear enough",
+        },
+        "transcript_text": "Where is [ORDER_REDACTED]?",
+        "assistant_response_text": "The order is paid.",
+        "tool_names": ["lookup_order"],
+        "handoff_reason": None,
+        "provider_events": ["data_channel=open"],
+        "latency_ms_values": [120],
+    }
+    payload.update(updates)
+    return ValidationRunSummary.model_validate(payload)
+
+
+def with_check(
+    summary: ValidationRunSummary,
+    check_name: str,
+    *,
+    passed: bool,
+    detail: str,
+) -> ValidationRunSummary:
+    checks = [
+        check.model_copy(update={"passed": passed, "detail": detail})
+        if check.name == check_name
+        else check
+        for check in summary.checks
+    ]
+    status = "pass" if all(check.passed for check in checks) else "fail"
+    return summary.model_copy(update={"checks": checks, "status": status})
 
 
 def test_standard_validation_scenarios_are_fixed_and_realistic() -> None:
@@ -124,6 +170,53 @@ def test_summary_model_serializes_required_checks() -> None:
     check_names = {check["name"] for check in payload["checks"]}
     assert "expected_tools_observed" in check_names
     assert "blocked_secret_scan_passed" in check_names
+
+
+def test_readiness_is_ready_for_pilot_when_summary_passes() -> None:
+    summary = make_summary()
+
+    readiness = derive_validation_report_readiness(summary)
+
+    assert readiness == "ready_for_pilot"
+
+
+def test_readiness_needs_another_validation_for_non_critical_failure() -> None:
+    summary = with_check(
+        make_summary(),
+        "manual_business_confirmed",
+        passed=False,
+        detail="manual business/demo checks failed",
+    )
+
+    readiness = derive_validation_report_readiness(summary)
+
+    assert readiness == "needs_another_validation"
+
+
+def test_readiness_is_blocked_when_provider_errors_are_observed() -> None:
+    summary = with_check(
+        make_summary(),
+        "provider_errors_absent",
+        passed=False,
+        detail="provider error marker found",
+    )
+
+    readiness = derive_validation_report_readiness(summary)
+
+    assert readiness == "blocked"
+
+
+def test_readiness_is_blocked_when_blocked_secret_scan_fails() -> None:
+    summary = with_check(
+        make_summary(),
+        "blocked_secret_scan_passed",
+        passed=False,
+        detail="saved payload contains blocked tokens",
+    )
+
+    readiness = derive_validation_report_readiness(summary)
+
+    assert readiness == "blocked"
 
 
 def test_validation_repository_creates_safe_run_paths(tmp_path) -> None:
