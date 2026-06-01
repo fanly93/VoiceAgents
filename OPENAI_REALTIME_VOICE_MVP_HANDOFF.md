@@ -2,30 +2,35 @@
 
 更新时间：2026-06-01
 
-本文档是新会话继续工作的主入口。新会话应先阅读本文件，然后直接从“下一步任务”开始，不需要重新从零探索项目。
+本文档是新会话继续工作的主入口。新会话应先阅读本文件，然后直接从“下一阶段建议”开始，不需要重新从零探索项目。
 
 ## 一句话状态
 
-OpenAI Realtime 真实语音 MVP、failure-mode 验证和真实语音手动验证主体已经完成；当前正在 `feat/pilot-validation-harness` 分支上收口 Pilot Validation Harness v1。该分支已实现本地验证报告能力，当前最重要的下一步是按 gstack workflow 做 merge 前 `$gstack-review`，修复 findings 后再合并回 `main`。
+OpenAI Realtime 真实语音 MVP、failure-mode 验证、真实语音手动验证和 Pilot Validation Harness v1 都已经完成并合并到 `main`。当前 post-merge archive 只记录最终状态、验证证据和下一阶段产品切口。
 
 ## 当前 Git 状态
 
-当前分支：
+已合并基线：
 
 ```bash
-feat/pilot-validation-harness
+main / origin/main
 ```
 
-当前状态：
-
-```bash
-git status --short --branch
-# ## feat/pilot-validation-harness...origin/main [ahead 6]
-```
-
-当前分支从 `origin/main` 派生，领先 6 个提交。最近提交：
+合并记录：
 
 ```text
+PR #8: https://github.com/fanly93/VoiceAgents/pull/8
+Merge commit: 015ad92 Add pilot validation harness
+Merged at: 2026-06-01T14:54:19Z
+```
+
+Pilot Validation Harness 关键提交：
+
+```text
+80de35e fix: require observed validation session state
+f54b530 fix: avoid validation scan false failures
+e0358fa docs: align pilot validation branch metadata
+2696b53 docs: refresh pilot validation handoff
 0fc1911 fix: preserve safe validation event names
 9a11b6b test: preserve failure-mode harness with validation init
 f896bfc docs: document validation harness completion
@@ -35,7 +40,7 @@ f0c08f8 docs: add pilot validation harness tasks
 72b9e0b origin/main docs: archive failure-mode validation merge
 ```
 
-注意：分支原名是 `feat/product-cut-discovery`，已重命名为 `feat/pilot-validation-harness`。部分 spec/tasks 文件里的 `Branch:` 元数据可能仍残留旧分支名，这是 merge 前 docs/code drift 检查需要修掉的小问题。
+分支原名是 `feat/product-cut-discovery`，后续已重命名为 `feat/pilot-validation-harness`。merge 前已修复当前阶段 spec/tasks/review 文档里的旧分支名 drift。
 
 ## 项目规则
 
@@ -118,7 +123,7 @@ origin/main commit 72b9e0b docs: archive failure-mode validation merge
 - 浏览器假麦克风音频注入不稳定，用户确认可用真实麦克风或手机播放方式辅助测试。
 - 需要把验证结果保存成可复查报告，因此进入 Pilot Validation Harness v1。
 
-## 当前阶段：Pilot Validation Harness v1
+## 已完成阶段：Pilot Validation Harness v1
 
 ### 目标
 
@@ -147,10 +152,10 @@ docs/reviews/plan-eng-review-pilot-validation-harness-v1-2026-06-01.md
 状态：
 
 ```text
-Status: IMPLEMENTED
+Status: IMPLEMENTED / MERGED
 ```
 
-注意：如果这些文档里仍写 `Branch: feat/product-cut-discovery`，应在 merge 前作为 docs drift 修复为 `feat/pilot-validation-harness`。
+这些文档已在 PR #8 merge 前对齐到 `feat/pilot-validation-harness`。
 
 ### 已实现功能
 
@@ -227,11 +232,11 @@ Validation Harness 不保存：
 
 ## 最近验证结果
 
-当前分支最后一次完整验证记录：
+PR #8 merge 前最终完整验证记录：
 
 ```bash
 ./.venv/bin/python -m pytest
-# 182 passed, 1 warning
+# 183 passed, 1 warning
 ```
 
 格式检查记录：
@@ -241,147 +246,33 @@ git diff --check
 # pass
 ```
 
-本 handoff 更新是 docs-only 修改；如果新会话接手后要继续 merge 前流程，应重新跑一次验证，不要只依赖历史结果。
+`$gstack-review` 已在 merge 前完成，发现并修复两个 informational findings：
+
+- 合法 provider event 名称 `response.output_audio_transcript.done` 不再触发 blocked-secret scan 假失败。
+- `session_observed` 不再接受 `idle` 这类未真正观察到会话的状态。
 
 ## 当前未完成事项
 
 ### Blocking
 
-当前分支还没有执行 merge 前 `$gstack-review`。按项目 workflow，必须先 review，再修复 findings，再合并。
+无。Pilot Validation Harness v1 已完成、review、验证、PR 并合并。
 
-### High
+### Follow-up
 
-需要修复可能的文档元数据 drift：
-
-- `docs/specs/voiceagents-pilot-validation-harness-v1.md`
-- `docs/specs/voiceagents-pilot-validation-harness-v1-tasks.md`
-
-重点检查是否仍写旧分支名 `feat/product-cut-discovery`。
-
-### Medium
-
-需要最终确认 README、handoff、spec、tasks 与当前实现一致：
-
-- endpoint 名称是否一致。
-- validation run 保存路径是否一致。
-- 五个场景是否一致。
-- 测试数据是否不再使用明显占位字符串。
-- out-of-scope 是否仍明确：不做商家后台、不做客服后台、不做生产审计、不接电话供应商、不保存 raw audio。
-
-### Low
-
-后续可改进但不阻塞当前合并：
-
-- 真实浏览器自动化的 fake microphone 路线仍不稳定。
 - Validation Harness v1 还没有 CLI。
 - 还没有商家可读的漂亮报告页面。
 - 还没有客服后台接手页面。
+- 真实浏览器自动化的 fake microphone 路线仍不稳定；真实语音验证仍建议用真实麦克风或手机播放辅助。
 
-## 下一步任务
+## 下一阶段建议
 
-建议新会话按下面顺序继续：
+进入下一阶段前，从干净 `main` 新建 feature branch。不要继续在已合并的 `feat/pilot-validation-harness` 上开发。
 
-### Step 1: 确认状态
+推荐切口：
 
-```bash
-git status --short --branch
-git log --oneline --decorate --max-count=8
-```
-
-期望看到：
-
-```text
-## feat/pilot-validation-harness...origin/main [ahead 6]
-```
-
-如果看到 docs-only handoff 修改未提交，这是正常的，先处理本文档更新的 checkpoint。
-
-### Step 2: 提交本文档 checkpoint
-
-如果本 handoff 是唯一修改，建议提交：
-
-```bash
-git add OPENAI_REALTIME_VOICE_MVP_HANDOFF.md
-git commit -m "docs: refresh pilot validation handoff"
-```
-
-提交前可检查：
-
-```bash
-git diff --check
-```
-
-### Step 3: 修复明显 docs drift
-
-检查并修复旧分支名：
-
-```bash
-rg "feat/product-cut-discovery|product-cut-discovery" .
-```
-
-预期把当前阶段相关文档改为：
-
-```text
-feat/pilot-validation-harness
-```
-
-这一步是 docs-only，可单独 commit。
-
-### Step 4: 跑 merge 前验证
-
-```bash
-./.venv/bin/python -m pytest
-git diff --check
-```
-
-### Step 5: 运行 `$gstack-review`
-
-按项目级 gstack 环境执行 merge 前 review。不要在合并后才做，因为 `$gstack-review` 依赖当前分支 vs base branch 的 diff。
-
-推荐审查重点：
-
-- specs 和代码是否一致。
-- validation endpoints 是否只作为 local/dev harness。
-- 保存报告是否严格脱敏。
-- `.voiceagents/validation-runs/` 是否未提交。
-- 旧 failure-mode 测试是否仍通过。
-- 是否引入不必要的生产逻辑变化。
-
-### Step 6: 修复 review findings
-
-按严重程度修复：
-
-```text
-Critical / High / Medium / Low
-```
-
-每个独立修复应：
-
-1. 写或更新测试。
-2. 修代码或文档。
-3. 跑 focused test。
-4. 小 commit。
-
-### Step 7: 最终验证并准备 merge
-
-最终至少跑：
-
-```bash
-./.venv/bin/python -m pytest
-git diff --check
-```
-
-通过后再 push / PR / merge。
-
-### Step 8: merge 后归档
-
-合并回 `main` 后，做 docs-only post-merge archive checkpoint：
-
-- 更新 handoff。
-- 更新 README。
-- 更新 spec/tasks 状态。
-- 记录最终测试结果。
-- 明确下一阶段产品切口。
+1. Pilot demo report viewer：把本地 report 变成更适合试点商家看的页面。
+2. Human handoff context viewer：把转人工上下文整理成客服可接手的结构。
+3. Validation scenario runner v2：把五个场景做成更明确的 guided workflow。
 
 ## 新会话不要重复做的事
 
@@ -403,19 +294,7 @@ git diff --check
 
 ### 2. 分支名 drift
 
-当前分支已经是：
-
-```text
-feat/pilot-validation-harness
-```
-
-如果文档里还出现旧分支：
-
-```text
-feat/product-cut-discovery
-```
-
-那是历史残留，应修复。
+PR #8 merge 前已修复当前阶段文档里的旧分支名 drift。后续新需求应从干净 `main` 新建分支，不要复用旧 feature branch。
 
 ### 3. 测试数据
 
@@ -441,35 +320,18 @@ ORD-20260601-1842
 
 `--use-file-for-fake-audio-capture` 在当前环境不稳定。需要真实语音验证时，可以使用用户麦克风或用户手机播放测试音频辅助。
 
-## 建议的下一阶段产品方向
-
-当前阶段完成并 merge 后，下一阶段不建议继续只围绕测试页打磨。用户已经明确三个方向都需要：
-
-1. 研发/自己用来稳定验收真实语音能力。
-2. 给试点商家看 demo 并收集反馈。
-3. 让客服团队能接手转人工上下文。
-
-Pilot Validation Harness v1 覆盖了第 1 个方向，并为第 2、3 个方向留下报告基础。后续更合理的产品切口可能是：
-
-- Pilot demo report viewer：把本地 report 变成更适合试点商家看的页面。
-- Human handoff context viewer：把转人工上下文整理成客服可接手的结构。
-- Validation scenario runner v2：把五个场景做成更明确的 guided workflow。
-
-但在进入这些新功能前，必须先完成当前分支的 `$gstack-review`、修复 findings、merge 和 post-merge archive。
-
 ## 快速启动清单
 
-新会话开局直接执行：
+新需求开局直接执行：
 
 ```bash
+git switch main
+git pull --ff-only
 git status --short --branch
-rg "feat/product-cut-discovery|product-cut-discovery" .
-git diff --check
-./.venv/bin/python -m pytest
 ```
 
-然后进入：
+然后从 `main` 新建 feature branch，按项目规则走：
 
 ```text
-$gstack-review -> 修复 findings -> full verification -> PR/merge -> post-merge archive
+spec/tasks -> implementation/tests -> $gstack-review -> PR/merge -> post-merge archive
 ```
