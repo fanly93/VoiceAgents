@@ -5,7 +5,7 @@
 ## 当前任务
 
 VoiceAgents OpenAI Realtime 真实语音接入 MVP 已通过 PR #4 合并到 `main`。
-本文档现在作为 post-merge archive handoff，记录已落地范围、验收证据、豁免项和后续延期项。
+本文档现在作为 post-merge archive handoff，记录已落地范围、验收证据、豁免项和后续跟进项。
 
 目标是在现有文本智能客服和 browser/local realtime plumbing 基础上，提供一个研发测试可用的真实语音 MVP：
 
@@ -60,7 +60,7 @@ c22b06d feat: wire realtime provider event ingest and logs
 e89f632 feat: add realtime event contracts
 ```
 
-本阶段已经从文档阶段推进到合并归档阶段。自动化测试和 mock smoke 已通过；真实 OpenAI 语音手动验收的核心路径已经完成。订单/物流真实模式重测按用户确认改为 scoped waiver，failure-mode 剩余浏览器异常路径延期到后续验证轮次。
+本阶段已经从文档阶段推进到合并归档阶段。自动化测试和 mock smoke 已通过；真实 OpenAI 语音手动验收的核心路径已经完成。订单/物流真实模式重测按用户确认改为 scoped waiver，浏览器 failure-mode 异常路径已在 PR #6 中补充自动化模拟覆盖。
 
 ## 重要项目规范
 
@@ -175,7 +175,7 @@ tests/fixtures/openai_realtime_events.json
 
 ```bash
 ./.venv/bin/python -m pytest
-# 162 passed, 1 warning
+# 163 passed, 1 warning
 ```
 
 重点测试覆盖：
@@ -191,6 +191,12 @@ tests/fixtures/openai_realtime_events.json
 - session token/provider/call/merchant binding
 - browser adapter event mapping
 - realtime test page controls and cleanup paths
+- realtime failure-mode browser JS simulation:
+  - client-secret failure
+  - microphone permission denial
+  - SDP exchange failure cleanup
+  - data channel close/error
+  - reconnect after failure
 
 合并后补充 smoke 验证：
 
@@ -218,12 +224,13 @@ NO_PROXY=127.0.0.1,localhost no_proxy=127.0.0.1,localhost \
 - 已完成：当前 real-mode session 的 JSONL 日志安全抽查，未发现 `client_secret`、`tool_call_token`、Authorization、SDP、raw audio 或未脱敏 transcript。
 - Scoped waiver：用户确认不再继续手测 `lookup_order` 和 `lookup_logistics` 真实模式重测；这两条路径由 mock/API/pytest 覆盖，并已替换为真实感合成订单号 `ORD-20260601-1842`。
 - 已完成：`$gstack-review` merge 前审查、review findings 修复、push、PR、merge。
-- 延期：浏览器 failure-mode 手动验证：
+- 已完成：PR #6 补齐浏览器 failure-mode 自动化模拟覆盖：
   - microphone permission denied
   - client-secret failure
-  - SDP exchange failure
+  - SDP exchange failure cleanup
   - data channel close/error
   - reconnect after failure
+- 可选跟进：真实浏览器手动复测上述 failure-mode，但不再作为当前 MVP 阻塞项。
 
 ## 2026-06-01 Real-Mode 手动验收记录
 
@@ -251,7 +258,7 @@ NO_PROXY=127.0.0.1,localhost no_proxy=127.0.0.1,localhost \
 | `lookup_order` real-mode 重测 | WAIVED | 用户确认不再继续手测；mock/API/pytest 覆盖，真实感订单号为 `ORD-20260601-1842` |
 | `lookup_logistics` real-mode 重测 | WAIVED | 用户确认不再继续手测；mock/API/pytest 覆盖，真实感物流数据为 YTO Express / Shanghai Hongqiao sorting center |
 | JSONL 日志安全抽查 | PASS | 当前 `.voiceagents/events/realtime-events.jsonl` 抽查未发现 secrets、SDP、raw audio、未脱敏 transcript |
-| Failure-mode 手动验证 | PARTIAL | Stop cleanup、Mute 已覆盖；permission denied、client-secret failure、SDP failure、data channel close/error、failure 后 reconnect 需补测或延期 |
+| Failure-mode 验证 | PASS | Stop cleanup、Mute 已手动覆盖；permission denied、client-secret failure、SDP failure、data channel close/error、failure 后 reconnect 已由 `tests/test_realtime_test_page_failure_modes.py` 自动化模拟覆盖 |
 
 Latency 面板说明：当前 UI 的 Latency 表示最近一次 client-secret/start 或 tool relay/event relay 的局部耗时，不是端到端语音响应延迟。
 
@@ -312,15 +319,15 @@ http://127.0.0.1:8000/realtime-test
 4. 依次触发当前需要手测的工具；订单/物流 real-mode 重测已按用户确认 scoped waiver，由 mock/API/pytest 覆盖。
 5. 确认 Transcript、Assistant Response、Tool Calls、Handoff、Provider Events 面板符合预期。
 6. 检查 `.voiceagents/events/realtime-events.jsonl` 不含 secrets、SDP、raw audio、未脱敏 transcript。
-7. 补齐或明确延期 failure-mode 验证。
+7. 如需更高信心，可选做真实浏览器 failure-mode 复测；当前自动化模拟已覆盖 MVP 阻塞项。
 
 ## 下一步建议
 
 当前最优下一步：
 
-1. 提交本次 post-merge archive 文档归档 checkpoint。
-2. 进入下一阶段前，按需补测 failure-mode 剩余项目，或在新 task 中继续保持 deferred 状态。
-3. 若开启新需求，从干净 `main` 新建 feature branch，并继续小步 checkpoint。
+1. 提交本次 PR #6 post-merge archive 文档归档 checkpoint。
+2. 若开启新需求，从干净 `main` 新建 feature branch，并继续小步 checkpoint。
+3. 可选补充真实浏览器 failure-mode 手动复测记录；这不是当前 MVP 阻塞项。
 
 ## 推荐新会话开局命令
 
