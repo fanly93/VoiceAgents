@@ -12,6 +12,7 @@ from voiceagents.realtime.validation import (
     ValidationRunRepository,
     ValidationRunStartRequest,
     ValidationRunSummary,
+    build_validation_run_report,
     derive_validation_report_readiness,
     evaluate_validation_checks,
 )
@@ -217,6 +218,60 @@ def test_readiness_is_blocked_when_blocked_secret_scan_fails() -> None:
     readiness = derive_validation_report_readiness(summary)
 
     assert readiness == "blocked"
+
+
+def test_report_view_contains_decision_summary_for_boss_audience() -> None:
+    report = build_validation_run_report(make_summary())
+
+    assert report.run_id == "vrun-20260601-120000-abcdef12"
+    assert report.scenario.scenario_id == "order_status"
+    assert report.scenario.label == "Order status lookup"
+    assert report.readiness == "ready_for_pilot"
+    assert report.decision_summary.label == "可以继续推进试点"
+    assert report.decision_summary.next_action
+    assert "老板" in {section.audience for section in report.audience_sections}
+    assert any("业务回答" in bullet for bullet in report.business_proof)
+    assert any(check.name == "expected_tools_observed" for check in report.checks)
+    assert report.warnings == []
+
+
+def test_report_view_adds_warnings_for_failed_checks() -> None:
+    summary = with_check(
+        make_summary(),
+        "manual_business_confirmed",
+        passed=False,
+        detail="manual business/demo checks failed",
+    )
+
+    report = build_validation_run_report(summary)
+
+    assert report.readiness == "needs_another_validation"
+    assert report.warnings == [
+        "manual_business_confirmed: manual business/demo checks failed"
+    ]
+
+
+def test_report_view_copy_summary_is_chinese_first_and_forwardable() -> None:
+    report = build_validation_run_report(make_summary())
+
+    assert report.copy_summary.text.startswith("试点演示验证结果：")
+    assert "订单状态查询" in report.copy_summary.text
+    assert "可以继续推进试点" in report.copy_summary.text
+    assert "证据：" in report.copy_summary.text
+    assert "下一步：" in report.copy_summary.text
+
+
+def test_report_view_does_not_expose_absolute_local_paths() -> None:
+    summary = make_summary(
+        summary_path="/Users/tanglin/VibeCoding/VoiceAgents/.voiceagents/validation-runs/vrun-20260601-120000-abcdef12/summary.json",
+        report_path="/Users/tanglin/VibeCoding/VoiceAgents/.voiceagents/validation-runs/vrun-20260601-120000-abcdef12/report.md",
+    )
+
+    report_payload = build_validation_run_report(summary).model_dump(mode="json")
+
+    assert "/Users/" not in json.dumps(report_payload, ensure_ascii=False)
+    assert "summary_path" not in report_payload
+    assert "report_path" not in report_payload
 
 
 def test_validation_repository_creates_safe_run_paths(tmp_path) -> None:
