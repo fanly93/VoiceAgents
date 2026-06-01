@@ -204,6 +204,16 @@ def test_validation_checks_fail_when_expected_tool_missing() -> None:
     assert "expected_tools_observed" in failed
 
 
+def test_validation_checks_fail_when_session_was_not_observed() -> None:
+    checks = evaluate_validation_checks(
+        STANDARD_VALIDATION_SCENARIOS[0],
+        make_finish_request(session_state="idle"),
+    )
+
+    failed = {check.name for check in checks if not check.passed}
+    assert "session_observed" in failed
+
+
 def test_validation_checks_fail_when_provider_errors_are_observed() -> None:
     checks = evaluate_validation_checks(
         STANDARD_VALIDATION_SCENARIOS[0],

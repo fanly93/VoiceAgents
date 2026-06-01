@@ -22,6 +22,15 @@ PROVIDER_ERROR_MARKERS = (
     "data_channel_error",
     "OpenAI SDP exchange failed",
 )
+OBSERVED_SESSION_STATES = frozenset(
+    {
+        "connected",
+        "ready",
+        "ended",
+        "data_channel_closed",
+        "data_channel_error",
+    }
+)
 BLOCKED_REPORT_FIELD_NAMES = tuple(
     sorted(
         {
@@ -205,6 +214,7 @@ def evaluate_validation_checks(
         for event in request.provider_events
         for marker in PROVIDER_ERROR_MARKERS
     )
+    session_state = request.session_state.strip()
     manual_voice = (
         request.manual_assertions.heard_voice
         and request.manual_assertions.voice_quality_acceptable
@@ -224,7 +234,7 @@ def evaluate_validation_checks(
         ),
         ValidationCheck(
             name="session_observed",
-            passed=bool(request.session_state.strip()),
+            passed=session_state in OBSERVED_SESSION_STATES,
             detail=f"session_state={request.session_state}",
         ),
         ValidationCheck(
