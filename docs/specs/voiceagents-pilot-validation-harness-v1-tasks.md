@@ -4,7 +4,7 @@ Status: IMPLEMENTED
 Source spec: `docs/specs/voiceagents-pilot-validation-harness-v1.md`
 Detailed TDD implementation plan: `docs/superpowers/plans/2026-06-01-pilot-validation-harness-v1.md`
 Plan review: `docs/reviews/plan-eng-review-pilot-validation-harness-v1-2026-06-01.md`
-Branch: `feat/product-cut-discovery`
+Branch: `feat/pilot-validation-harness`
 
 This document is the project-level task tracker for the Pilot Validation Harness v1 feature. The detailed red/green/refactor steps, code snippets, and expected pytest output remain in the Superpowers implementation plan. If this task tracker and the detailed plan ever disagree, update this tracker and the detailed plan in the same docs checkpoint before coding.
 
@@ -725,4 +725,4 @@ Avoid parallel work:
 4. Phase 4 connects `/realtime-test`.
 5. Phase 5 documents, verifies, and reviews the branch.
 
-Implementation completed on `feat/product-cut-discovery`. Future changes should start from a fresh task update and keep this tracker, the source spec, and the detailed Superpowers plan aligned before coding.
+Implementation completed on `feat/pilot-validation-harness`. Future changes should start from a fresh task update and keep this tracker, the source spec, and the detailed Superpowers plan aligned before coding.

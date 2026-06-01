@@ -1,7 +1,7 @@
 # Plan Eng Review: Pilot Validation Harness v1
 
 Date: 2026-06-01
-Branch: `feat/product-cut-discovery`
+Branch: `feat/pilot-validation-harness`
 Reviewed docs:
 
 - `docs/designs/voiceagents-pilot-validation-harness-v1.md`
@@ -126,4 +126,3 @@ Avoid scanning large historical JSONL logs on every finish. The v1 blocked-secre
 Proceed to user review of the spec and plan. After approval, implement with TDD and checkpoint after each task.
 
 Do not start implementation until the user confirms the spec/plan direction.
-

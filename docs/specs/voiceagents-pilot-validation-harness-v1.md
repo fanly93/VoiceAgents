@@ -2,7 +2,7 @@
 
 Status: IMPLEMENTED
 Date: 2026-06-01
-Branch: `feat/product-cut-discovery`
+Branch: `feat/pilot-validation-harness`
 Source design: `docs/designs/voiceagents-pilot-validation-harness-v1.md`
 
 ## Goal
