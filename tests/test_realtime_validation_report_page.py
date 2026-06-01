@@ -54,6 +54,23 @@ def test_render_report_detail_loads_selected_run() -> None:
     )
 
 
+@pytest.mark.skipif(shutil.which("node") is None, reason="node is required for browser JS harness")
+def test_copy_summary_copies_chinese_forwardable_text() -> None:
+    run_report_harness(
+        r"""
+  fetchMode = "report";
+  await api.loadRuns();
+  await api.copySummary();
+
+  assert(document.getElementById("copy-summary").value.startsWith("试点演示验证结果："), "copy summary should be visible");
+  assert(copiedText.includes("订单状态查询"), "copied text should include scenario");
+  assert(copiedText.includes("可以继续推进试点"), "copied text should include readiness");
+  assert(copiedText.includes("证据："), "copied text should include evidence");
+  assert(copiedText.includes("下一步："), "copied text should include next action");
+"""
+    )
+
+
 def run_report_harness(assertions: str) -> None:
     script = (
         r"""
@@ -82,6 +99,7 @@ const response = ({ ok = true, status = 200, json = [] }) => ({
 const elements = new Map();
 const fetchCalls = [];
 let fetchMode = "empty";
+let copiedText = "";
 const reportRun = {
   run_id: "vrun-20260601-120000-abcdef12",
   scenario_label: "Order status lookup",
@@ -184,7 +202,7 @@ const document = {
 const context = {
   window: {},
   document,
-  navigator: { clipboard: { writeText: async () => {} } },
+  navigator: { clipboard: { writeText: async (text) => { copiedText = text; } } },
   fetch: async (url) => {
     fetchCalls.push({ url: String(url) });
     if (fetchMode === "error") {

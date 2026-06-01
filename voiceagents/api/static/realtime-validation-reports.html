@@ -213,6 +213,7 @@
         audienceSections: document.getElementById("audience-sections"),
         warnings: document.getElementById("warnings"),
         copySummary: document.getElementById("copy-summary"),
+        copySummaryButton: document.getElementById("copy-summary-button"),
       };
 
       function setHidden(element, hidden) {
@@ -307,11 +308,27 @@
         );
       }
 
+      async function copySummary() {
+        const text = elements.copySummary.value;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(text);
+        } else {
+          elements.copySummary.focus();
+          elements.copySummary.select();
+        }
+        return text;
+      }
+
+      elements.copySummaryButton.addEventListener("click", () => {
+        copySummary();
+      });
+
       window.voiceAgentsValidationReports = {
         loadRuns,
         loadReport,
         renderRunList,
         renderReport,
+        copySummary,
         getState: () => ({ ...state }),
       };
     </script>
