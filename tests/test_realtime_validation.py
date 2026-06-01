@@ -389,6 +389,29 @@ def test_list_saved_runs_skips_summaries_with_mismatched_run_id(tmp_path) -> Non
     assert runs == []
 
 
+def test_list_saved_runs_falls_back_to_run_id_when_finished_at_is_missing(tmp_path) -> None:
+    root = tmp_path / "validation-runs"
+    older = make_summary(run_id="vrun-20260601-120000-abcdef12")
+    newer = make_summary(run_id="vrun-20260601-130000-bcdefa23")
+    for summary in [older, newer]:
+        run_dir = root / summary.run_id
+        run_dir.mkdir(parents=True)
+        payload = summary.model_dump(mode="json")
+        payload.pop("finished_at")
+        (run_dir / "summary.json").write_text(
+            json.dumps(payload),
+            encoding="utf-8",
+        )
+
+    runs = ValidationRunRepository(root).list_saved_runs()
+
+    assert [run.run_id for run in runs] == [
+        "vrun-20260601-130000-bcdefa23",
+        "vrun-20260601-120000-abcdef12",
+    ]
+    assert runs[0].finished_at == "vrun-20260601-130000-bcdefa23"
+
+
 def test_load_report_returns_safe_report_for_run_id(tmp_path) -> None:
     root = tmp_path / "validation-runs"
     summary = make_summary(run_id="vrun-20260601-120000-abcdef12")

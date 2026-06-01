@@ -580,9 +580,10 @@ class ValidationRunRepository:
             except ValueError:
                 continue
             try:
-                summary = ValidationRunSummary.model_validate_json(
-                    summary_path.read_text(encoding="utf-8")
-                )
+                summary_payload = json.loads(summary_path.read_text(encoding="utf-8"))
+                if not summary_payload.get("finished_at"):
+                    summary_payload["finished_at"] = run_dir.name
+                summary = ValidationRunSummary.model_validate(summary_payload)
             except Exception:
                 continue
             if summary.run_id != run_dir.name or not RUN_ID_RE.fullmatch(summary.run_id):
