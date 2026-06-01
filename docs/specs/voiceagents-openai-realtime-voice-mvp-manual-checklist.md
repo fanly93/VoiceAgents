@@ -66,6 +66,8 @@ Notes:
 
 ## Recorded Verification - 2026-06-01
 
+Post-merge archive note: PR #4 was merged with the PASS/WAIVED/TODO split below. The two waived order/logistics real-mode retests are intentionally not blocking this checkpoint because mock/API/pytest cover those tool paths with realistic fixture data. Remaining browser failure-mode TODOs are deferred, not silently considered passed.
+
 ```text
 Manual OpenAI realtime verification: PARTIAL PASS
 Date: 2026-06-01

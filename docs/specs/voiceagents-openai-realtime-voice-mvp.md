@@ -1,8 +1,9 @@
 # VoiceAgents 真实语音接入 MVP Spec
 
-Status: DRAFT
-Branch: `feat/openai-realtime-voice-mvp`
+Status: IMPLEMENTED / MERGED
+Branch: `main` after PR #4 merge; implemented on `feat/openai-realtime-voice-mvp`
 Date: 2026-05-30
+Post-merge archive update: 2026-06-01
 Primary provider in this phase: OpenAI Realtime
 
 ## 目标
@@ -23,13 +24,15 @@ VoiceAgents 已有文本智能客服 SaaS 和上一阶段的 browser/local realt
 - redaction
 - smoke tests
 
-当前缺口是浏览器还不能用麦克风连接真实语音模型，不能完成真实语音输入、模型语音输出、Realtime 事件监听、工具调用回传和脱敏 transcript 记录。
+实现前缺口是浏览器还不能用麦克风连接真实语音模型，不能完成真实语音输入、模型语音输出、Realtime 事件监听、工具调用回传和脱敏 transcript 记录。PR #4 合并后，这些 MVP 路径已经实现并完成核心手动验收；订单/物流真实模式重测按用户确认 scoped waiver，剩余 browser failure-mode 异常路径延期。
 
 本阶段先服务研发测试。研发验证基本稳定后，再给商家和客服试用。
 
-## 已验证当前状态
+## 实现前基线
 
 验证日期：2026-05-30
+
+本节记录实现前基线，不代表 PR #4 合并后的当前状态。
 
 | 模块 | 当前状态 | 缺口 |
 |---|---|---|
@@ -39,6 +42,26 @@ VoiceAgents 已有文本智能客服 SaaS 和上一阶段的 browser/local realt
 | `voiceagents/realtime/tool_router.py` | 已支持订单、物流、商品知识、转人工工具路由 | 需要被浏览器 data channel 事件触发 |
 | `voiceagents/realtime/event_log.py` | 已写 JSONL，已过滤 `raw_audio`、`client_secret`、`tool_call_token`、`authorization` | 需要结构化事件和脱敏 transcript 记录 |
 | `voiceagents/realtime/redaction.py` | 已支持邮箱、电话、订单号等脱敏 | 需要覆盖 transcript JSONL |
+
+## Post-Merge 实现状态
+
+归档日期：2026-06-01
+
+| 模块 | 合并后状态 |
+|---|---|
+| `voiceagents/realtime/providers.py` | `OpenAIRealtimeProvider` 已通过服务端创建 OpenAI Realtime ephemeral client secret，API key 仅在服务端使用 |
+| `voiceagents/api/app.py` | `/v1/realtime/client-secret`、`/v1/realtime/event`、`/v1/realtime/tool-call` 已具备 dev gate、localhost/same-origin 校验、token/session/provider/call/merchant 绑定和安全拒绝路径 |
+| `voiceagents/api/static/realtime-test.html` | 已支持 `getUserMedia`、`RTCPeerConnection`、remote audio、Start/Stop/Mute、Text/Voice runtime 切换和 cleanup |
+| `voiceagents/api/static/realtime-openai-adapter.js` | 已把 OpenAI provider events 归一化为内部事件，并 relay tool calls / tool outputs |
+| `voiceagents/realtime/event_log.py` | 已写结构化 JSONL，拦截 raw audio、SDP、client secret、tool token、Authorization、raw tool arguments 等敏感字段 |
+| `voiceagents/realtime/redaction.py` | 已用于 transcript / safe summary 写入前脱敏 |
+
+合并证据：
+
+- PR #4 merged into `main`: `35f16a9 OpenAI Realtime voice MVP`
+- Full test suite: `./.venv/bin/python -m pytest` -> `162 passed, 1 warning`
+- Mock smoke: `scripts/smoke_api.py` and `scripts/smoke_realtime_api.py` passed against local mock-mode API
+- Real-mode manual verification: 3+ minute OpenAI Realtime browser voice session passed for core flow, Text/Voice behavior, Mute/Unmute, product knowledge hit, low-confidence handoff, and structured log safety
 
 ## OpenAI API 依据
 

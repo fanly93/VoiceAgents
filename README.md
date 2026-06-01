@@ -14,7 +14,7 @@ Real pilot call recordings are not available yet, so real-call evaluation is def
 - Validate call evaluation data before it is used as an acceptance baseline.
 - Run local HTTP end-to-end examples against the backend skeleton.
 - Validate browser/local realtime voice session plumbing with mock-safe provider behavior.
-- Prepare the next OpenAI Realtime browser voice MVP behind a local development gate.
+- Operate and validate the merged OpenAI Realtime browser voice MVP behind a local development gate.
 
 ## Out of Scope for the Current Phase
 
@@ -33,20 +33,20 @@ Use an isolated project environment. Do not install dependencies into the system
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install -e ".[dev]"
+./.venv/bin/python -m pip install -e ".[dev]"
 ```
 
 Run tests and sample evaluation validation:
 
 ```bash
-python -m pytest
-python scripts/validate_call_evaluations.py data/call-evaluations/sample.json
+./.venv/bin/python -m pytest
+./.venv/bin/python scripts/validate_call_evaluations.py data/call-evaluations/sample.json
 ```
 
 Run the local backend skeleton:
 
 ```bash
-python -m uvicorn voiceagents.api.main:app --reload
+./.venv/bin/python -m uvicorn voiceagents.api.main:app --reload
 ```
 
 Check health:
@@ -76,7 +76,7 @@ curl -X POST http://127.0.0.1:8000/v1/calls/simulate \
 Run the local HTTP smoke test against a running server:
 
 ```bash
-python scripts/smoke_api.py --base-url http://127.0.0.1:8000
+./.venv/bin/python scripts/smoke_api.py --base-url http://127.0.0.1:8000
 ```
 
 The smoke script calls `/health`, then submits every JSON payload in `examples/call-simulations/` to `/v1/calls/simulate`.
@@ -86,7 +86,7 @@ The smoke script calls `/health`, then submits every JSON payload in `examples/c
 Start the API in mock realtime provider mode. This is the default, but the explicit environment variable keeps local runs clear:
 
 ```bash
-VOICEAGENTS_REALTIME_PROVIDER=mock python -m uvicorn voiceagents.api.main:app --reload
+VOICEAGENTS_REALTIME_PROVIDER=mock ./.venv/bin/python -m uvicorn voiceagents.api.main:app --reload
 ```
 
 Open the browser test page:
@@ -129,7 +129,7 @@ Local realtime event logs under `.voiceagents/` are gitignored. Treat the tool-c
 Run the realtime smoke test against a running mock-mode server:
 
 ```bash
-python scripts/smoke_realtime_api.py --base-url http://127.0.0.1:8000
+./.venv/bin/python scripts/smoke_realtime_api.py --base-url http://127.0.0.1:8000
 ```
 
 The realtime smoke script is intentionally mock-mode only. It validates `/health`, client-secret minting, the four approved tool calls, unknown tool rejection, and missing authorization rejection without requiring `OPENAI_API_KEY`. Real OpenAI voice verification is manual; use `docs/specs/voiceagents-openai-realtime-voice-mvp-manual-checklist.md` for the 3 minute `/realtime-test` run and browser failure-mode checks.
@@ -137,7 +137,7 @@ The realtime smoke script is intentionally mock-mode only. It validates `/health
 Validate example payload compatibility without starting a server:
 
 ```bash
-python -m pytest tests/test_example_call_payloads.py
+./.venv/bin/python -m pytest tests/test_example_call_payloads.py
 ```
 
 ## Local Call Simulation Examples
