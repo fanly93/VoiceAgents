@@ -10,7 +10,7 @@
       "intent_secondary": "order_status",
       "requires_order_id": true,
       "order_id_spoken": true,
-      "order_id_transcript": "ORDER-REDACTED-001",
+      "order_id_transcript": "ORD-20260601-1842",
       "order_id_confidence": 0.82,
       "tool_required": "multiple",
       "rag_answer_required": false,
@@ -50,7 +50,7 @@
       "intent_secondary": "complaint",
       "requires_order_id": true,
       "order_id_spoken": true,
-      "order_id_transcript": "ORDER-REDACTED-003",
+      "order_id_transcript": "ORD-20260601-7390",
       "order_id_confidence": 0.57,
       "tool_required": "handoff_to_human",
       "rag_answer_required": false,
@@ -62,4 +62,3 @@
     }
   ]
 }
-

@@ -8,10 +8,10 @@ def test_valid_handoff_returns_live_transfer() -> None:
 
     response = adapter.handoff(
         HandoffRequest(
-            call_id="CALL-REDACTED",
+            call_id="CALL-20260601-HANDOFF",
             merchant_id="merchant_demo",
             intent_primary="logistics_tracking",
-            order_id_candidate="ORDER-REDACTED",
+            order_id_candidate="ORD-20260601-1842",
             summary="Customer wants tracking information.",
             tools_called=["lookup_logistics"],
             handoff_reason=HandoffReason.ORDER_ID_UNCONFIRMED,
@@ -20,6 +20,5 @@ def test_valid_handoff_returns_live_transfer() -> None:
     )
 
     assert response.ok is True
-    assert response.handoff_id == "HANDOFF-REDACTED"
+    assert response.handoff_id == "HND-20260601-0007"
     assert response.mode == HandoffMode.LIVE_TRANSFER
-

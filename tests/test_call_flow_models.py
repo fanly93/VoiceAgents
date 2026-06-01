@@ -12,7 +12,7 @@ def test_call_flow_input_accepts_valid_data() -> None:
         locale="en-GB",
         intent="order_status",
         utterance="Where is my order?",
-        order_id_candidate="ORDER-REDACTED-001",
+        order_id_candidate="ORD-20260601-1842",
         order_id_confirmed=True,
         asr_confidence=0.91,
         customer_requested_human=False,
@@ -29,7 +29,7 @@ def test_call_flow_output_accepts_valid_data() -> None:
         tools_called=["handoff_to_human"],
         handoff_required=True,
         handoff_reason=HandoffReason.LOW_ASR_CONFIDENCE,
-        handoff_id="HANDOFF-REDACTED",
+        handoff_id="HND-20260601-0007",
     )
 
     assert model.handoff_required is True
@@ -44,9 +44,8 @@ def test_call_flow_input_rejects_confidence_above_one() -> None:
             locale="en-GB",
             intent="order_status",
             utterance="Where is my order?",
-            order_id_candidate="ORDER-REDACTED-001",
+            order_id_candidate="ORD-20260601-1842",
             order_id_confirmed=True,
             asr_confidence=1.2,
             customer_requested_human=False,
         )
-

@@ -10,15 +10,15 @@ class MockLogisticsAdapter:
         self,
         request: LookupLogisticsRequest,
     ) -> LookupLogisticsResponse:
-        if request.order_id == "ORDER-REDACTED-001":
+        if request.order_id == "ORD-20260601-1842":
             return LookupLogisticsResponse(
                 ok=True,
                 status="in_transit",
-                latest_event="Package departed the redacted sorting facility.",
+                latest_event="Package departed the Shanghai Hongqiao sorting center.",
                 estimated_delivery="2026-06-02",
-                carrier="carrier-redacted",
+                carrier="YTO Express",
                 user_summary=(
-                    "Your package is in transit with carrier-redacted and is "
+                    "Your package is in transit with YTO Express and is "
                     "estimated to arrive on 2026-06-02."
                 ),
                 error_code=None,

@@ -27,7 +27,7 @@ def test_known_product_question_is_resolved() -> None:
             merchant_id="merchant_demo",
             locale="en-GB",
             intent="product_usage",
-            utterance="How should I wash my wig?",
+            utterance="LunaCare 假发护理套装应该怎么清洗假发？",
             order_id_candidate=None,
             order_id_confirmed=False,
             asr_confidence=0.91,
@@ -66,7 +66,7 @@ def test_unknown_product_question_hands_off() -> None:
     assert output.resolved is False
     assert output.handoff_required is True
     assert output.handoff_reason == HandoffReason.RAG_LOW_CONFIDENCE
-    assert output.handoff_id == "HANDOFF-REDACTED"
+    assert output.handoff_id == "HND-20260601-0007"
     assert output.tools_called == ["query_product_knowledge", "handoff_to_human"]
     assert handoff_adapter.last_request is not None
     assert handoff_adapter.last_request.tools_called == ["query_product_knowledge"]

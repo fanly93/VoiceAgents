@@ -1,13 +1,18 @@
 .DS_Store
+.env
 __pycache__/
 *.pyc
 .pytest_cache/
+.venv/
+venv/
+*.egg-info/
 
 # Local project-scoped tool/runtime state.
 .bun/
 .gstack/
 .gstack-home/
 .voiceagents/
+test-artifacts/
 
 # Repo-local gstack install generated for this working copy.
 .agents/skills/gstack/

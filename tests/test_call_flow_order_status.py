@@ -18,7 +18,7 @@ def test_confirmed_order_status_call_is_resolved() -> None:
             locale="en-GB",
             intent="order_status",
             utterance="Where is my order?",
-            order_id_candidate="ORDER-REDACTED-001",
+            order_id_candidate="ORD-20260601-1842",
             order_id_confirmed=True,
             asr_confidence=0.91,
             customer_requested_human=False,
@@ -30,4 +30,3 @@ def test_confirmed_order_status_call_is_resolved() -> None:
     assert output.handoff_reason == HandoffReason.NONE
     assert output.tools_called == ["lookup_order"]
     assert "paid" in output.response_text
-

@@ -9,7 +9,7 @@ Input:
 ```json
 {
   "merchant_id": "merchant_demo",
-  "order_id": "ORDER-REDACTED"
+  "order_id": "ORD-20260601-1842"
 }
 ```
 
@@ -20,10 +20,9 @@ Output:
   "ok": true,
   "order_exists": true,
   "status": "paid",
-  "user_summary": "I found your order. It has been paid and is being prepared for shipment.",
+  "user_summary": "Order ORD-20260601-1842 has been paid.",
   "safe_fields": {
-    "order_status": "paid",
-    "created_date": "2026-05-20"
+    "order_status": "paid"
   }
 }
 ```
@@ -42,7 +41,7 @@ Input:
 ```json
 {
   "merchant_id": "merchant_demo",
-  "order_id": "ORDER-REDACTED"
+  "order_id": "ORD-20260601-1842"
 }
 ```
 
@@ -52,10 +51,10 @@ Output:
 {
   "ok": true,
   "status": "in_transit",
-  "latest_event": "Package departed the sorting center.",
+  "latest_event": "Package departed the Shanghai Hongqiao sorting center.",
   "estimated_delivery": "2026-06-02",
-  "carrier": "carrier-redacted",
-  "user_summary": "Your package is in transit and is currently expected around June 2."
+  "carrier": "YTO Express",
+  "user_summary": "Your package is in transit with YTO Express and is estimated to arrive on 2026-06-02."
 }
 ```
 
@@ -73,8 +72,8 @@ Input:
 ```json
 {
   "merchant_id": "merchant_demo",
-  "locale": "en-GB",
-  "query": "How should I wash my wig?"
+  "locale": "zh-CN",
+  "query": "LunaCare 假发护理套装应该怎么清洗假发？"
 }
 ```
 
@@ -84,7 +83,7 @@ Output:
 {
   "ok": true,
   "short_answer": "Use cool water and a small amount of wig-safe shampoo. Do not twist the hair. Let it air dry on a stand.",
-  "citations": ["faq:washing-care"],
+  "citations": ["faq:lunacare-wig-washing"],
   "confidence": 0.86,
   "handoff_recommended": false
 }
@@ -103,10 +102,10 @@ Input:
 
 ```json
 {
-  "call_id": "CALL-REDACTED",
+  "call_id": "CALL-20260601-0901",
   "merchant_id": "merchant_demo",
   "intent_primary": "logistics_tracking",
-  "order_id_candidate": "ORDER-REDACTED",
+  "order_id_candidate": "ORD-20260601-1842",
   "summary": "Customer wants tracking information. Agent could not confirm the spoken order number.",
   "tools_called": ["lookup_logistics"],
   "handoff_reason": "order_id_unconfirmed",
@@ -119,7 +118,7 @@ Output:
 ```json
 {
   "ok": true,
-  "handoff_id": "HANDOFF-REDACTED",
+  "handoff_id": "HND-20260601-0007",
   "mode": "live_transfer"
 }
 ```
@@ -129,4 +128,3 @@ Handoff modes:
 - `live_transfer`
 - `callback`
 - `ticket`
-

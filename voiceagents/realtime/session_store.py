@@ -5,7 +5,7 @@ import hmac
 import secrets
 
 from voiceagents.contracts.common import HandoffReason
-from voiceagents.realtime.contracts import VoiceSessionState
+from voiceagents.realtime.contracts import RealtimeProviderName, VoiceSessionState
 
 
 DEFAULT_TOOL_CALL_TOKEN_TTL_SECONDS = 600
@@ -28,6 +28,7 @@ class VoiceSession:
     session_id: str
     call_id: str
     merchant_id: str
+    provider: RealtimeProviderName
     state: VoiceSessionState
     token_hash: str
     token_expires_at: datetime
@@ -58,6 +59,7 @@ class InMemoryVoiceSessionStore:
         session_id: str,
         call_id: str,
         merchant_id: str,
+        provider: RealtimeProviderName = RealtimeProviderName.MOCK,
         token_expires_at: datetime | None = None,
         now: datetime | None = None,
     ) -> CreatedVoiceSession:
@@ -70,6 +72,7 @@ class InMemoryVoiceSessionStore:
             session_id=session_id,
             call_id=call_id,
             merchant_id=merchant_id,
+            provider=provider,
             state=VoiceSessionState.IDLE,
             token_hash=_hash_token(token),
             token_expires_at=expires_at,
@@ -96,6 +99,25 @@ class InMemoryVoiceSessionStore:
         if (now or _utc_now()) >= session.token_expires_at:
             return False
         return hmac.compare_digest(session.token_hash, _hash_token(token))
+
+    def verify_session_token_binding(
+        self,
+        session_id: str,
+        token: str,
+        *,
+        call_id: str,
+        merchant_id: str,
+        provider: RealtimeProviderName,
+        now: datetime | None = None,
+    ) -> bool:
+        session = self.get_session(session_id)
+        metadata_matches = (
+            session.call_id == call_id
+            and session.merchant_id == merchant_id
+            and session.provider == provider
+        )
+        token_is_valid = self.verify_tool_call_token(session_id, token, now=now)
+        return metadata_matches and token_is_valid
 
     def update_state(self, session_id: str, state: VoiceSessionState) -> VoiceSession:
         session = self.get_session(session_id)

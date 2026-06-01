@@ -403,7 +403,7 @@ Inputs:
 
 - `LookupOrderRequest`
 - `LookupOrderResponse`
-- Redacted sample order ID: `ORDER-REDACTED-001`
+- Realistic synthetic sample order ID: `ORD-20260601-1842`
 
 Outputs:
 
@@ -446,7 +446,7 @@ Inputs:
 
 - `LookupLogisticsRequest`
 - `LookupLogisticsResponse`
-- Redacted sample order ID: `ORDER-REDACTED-001`
+- Realistic synthetic sample order ID: `ORD-20260601-1842`
 
 Outputs:
 
@@ -539,7 +539,7 @@ Outputs:
 
 Behavior:
 
-- Valid request returns `ok=True`, `handoff_id=HANDOFF-REDACTED`, `mode=live_transfer`.
+- Valid request returns `ok=True`, `handoff_id=HND-20260601-0007`, `mode=live_transfer`.
 
 Steps:
 
@@ -678,7 +678,7 @@ Purpose: resolve confirmed order-status calls through the order adapter.
 Inputs:
 
 - `intent=order_status`
-- `order_id_candidate=ORDER-REDACTED-001`
+- `order_id_candidate=ORD-20260601-1842`
 - `order_id_confirmed=True`
 - `asr_confidence >= 0.6`
 
@@ -724,7 +724,7 @@ Purpose: resolve confirmed logistics calls through the logistics adapter.
 Inputs:
 
 - `intent=logistics_tracking`
-- `order_id_candidate=ORDER-REDACTED-001`
+- `order_id_candidate=ORD-20260601-1842`
 - `order_id_confirmed=True`
 - `asr_confidence >= 0.6`
 
@@ -770,7 +770,7 @@ Purpose: answer known product questions and hand off unknown product questions.
 Inputs:
 
 - `intent=product_usage`
-- `utterance` containing known query such as `How should I wash my wig?`
+- `utterance` containing known query such as `LunaCare 假发护理套装应该怎么清洗假发？`
 - Unknown product query
 
 Outputs:

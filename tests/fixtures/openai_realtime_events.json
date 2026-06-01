@@ -1,0 +1,137 @@
+{
+  "retrieved_at": "2026-05-31",
+  "source_url": "https://developers.openai.com/api/reference/resources/realtime",
+  "server_events": [
+    {
+      "type": "response.output_audio_transcript.delta",
+      "event_id": "event_transcript_delta_001",
+      "response_id": "resp_001",
+      "item_id": "item_assistant_001",
+      "output_index": 0,
+      "content_index": 0,
+      "delta": "Your order "
+    },
+    {
+      "type": "response.output_audio_transcript.done",
+      "event_id": "event_transcript_done_001",
+      "response_id": "resp_001",
+      "item_id": "item_assistant_001",
+      "output_index": 0,
+      "content_index": 0,
+      "transcript": "Your order has shipped."
+    },
+    {
+      "type": "response.output_text.delta",
+      "event_id": "event_text_delta_001",
+      "response_id": "resp_text_001",
+      "item_id": "item_assistant_text_001",
+      "output_index": 0,
+      "content_index": 0,
+      "delta": "Your order "
+    },
+    {
+      "type": "response.output_text.done",
+      "event_id": "event_text_done_001",
+      "response_id": "resp_text_001",
+      "item_id": "item_assistant_text_001",
+      "output_index": 0,
+      "content_index": 0,
+      "text": "Your order has shipped."
+    },
+    {
+      "type": "conversation.item.input_audio_transcription.segment",
+      "event_id": "event_user_segment_001",
+      "item_id": "item_user_001",
+      "content_index": 0,
+      "id": "seg_001",
+      "start": 0.0,
+      "end": 1.24,
+      "speaker": "user",
+      "text": "Where is my order?"
+    },
+    {
+      "type": "conversation.item.input_audio_transcription.delta",
+      "event_id": "event_user_delta_001",
+      "item_id": "item_user_002",
+      "content_index": 0,
+      "delta": "Where is "
+    },
+    {
+      "type": "conversation.item.input_audio_transcription.completed",
+      "event_id": "event_user_completed_001",
+      "item_id": "item_user_002",
+      "content_index": 0,
+      "transcript": "Where is my order?"
+    },
+    {
+      "type": "conversation.item.done",
+      "event_id": "event_user_done_001",
+      "previous_item_id": "item_prev_001",
+      "item": {
+        "id": "item_user_001",
+        "object": "realtime.item",
+        "type": "message",
+        "status": "completed",
+        "role": "user",
+        "content": [
+          {
+            "type": "input_audio",
+            "transcript": "Where is my order?"
+          }
+        ]
+      }
+    },
+    {
+      "type": "response.function_call_arguments.done",
+      "event_id": "event_tool_args_done_001",
+      "response_id": "resp_002",
+      "item_id": "fc_001",
+      "output_index": 0,
+      "call_id": "call_provider_001",
+      "name": "lookup_order",
+      "arguments": "{\"order_id\":\"ORDER-123456\"}"
+    },
+    {
+      "type": "response.done",
+      "event_id": "event_response_done_001",
+      "response": {
+        "id": "resp_001",
+        "object": "realtime.response",
+        "status": "completed",
+        "output": [
+          {
+            "id": "item_assistant_001",
+            "type": "message",
+            "status": "completed",
+            "role": "assistant"
+          }
+        ]
+      }
+    },
+    {
+      "type": "error",
+      "event_id": "event_error_001",
+      "error": {
+        "type": "invalid_request_error",
+        "code": "invalid_event",
+        "message": "Invalid realtime event.",
+        "event_id": "client_event_001"
+      }
+    }
+  ],
+  "client_events": [
+    {
+      "type": "conversation.item.create",
+      "event_id": "event_function_output_001",
+      "item": {
+        "type": "function_call_output",
+        "call_id": "call_provider_001",
+        "output": "{\"safe_summary\":\"Order [ORDER_REDACTED] has shipped.\"}"
+      }
+    },
+    {
+      "type": "response.create",
+      "event_id": "event_continue_response_001"
+    }
+  ]
+}

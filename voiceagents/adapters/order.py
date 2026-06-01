@@ -4,12 +4,12 @@ from voiceagents.contracts.order import LookupOrderRequest, LookupOrderResponse
 
 class MockOrderAdapter:
     def lookup_order(self, request: LookupOrderRequest) -> LookupOrderResponse:
-        if request.order_id == "ORDER-REDACTED-001":
+        if request.order_id == "ORD-20260601-1842":
             return LookupOrderResponse(
                 ok=True,
                 order_exists=True,
                 status="paid",
-                user_summary="Order ORDER-REDACTED-001 has been paid.",
+                user_summary="Order ORD-20260601-1842 has been paid.",
                 safe_fields={"order_status": "paid"},
                 error_code=None,
             )

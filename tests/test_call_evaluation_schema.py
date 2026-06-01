@@ -12,7 +12,7 @@ def valid_call() -> dict:
         "intent_secondary": "order_status",
         "requires_order_id": True,
         "order_id_spoken": True,
-        "order_id_transcript": "ORDER-REDACTED",
+        "order_id_transcript": "ORD-20260601-1842",
         "order_id_confidence": 0.9,
         "tool_required": "multiple",
         "rag_answer_required": False,
@@ -50,4 +50,3 @@ def test_rejects_unknown_intents() -> None:
     issues = validate_dataset({"calls": [call]})
 
     assert any(issue.field == "intent_primary" for issue in issues)
-

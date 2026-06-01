@@ -66,6 +66,12 @@
         cursor: pointer;
       }
 
+      button.is-muted {
+        border-color: #a13f12;
+        background: #fff1e8;
+        color: #7d2d0c;
+      }
+
       .grid {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
@@ -91,7 +97,7 @@
         <div class="toolbar">
           <button id="start-session" type="button">Start</button>
           <button id="stop-session" type="button">Stop</button>
-          <button id="mute-toggle" type="button">Mute</button>
+          <button id="mute-toggle" type="button" aria-pressed="false">Mute</button>
           <select id="response-mode" aria-label="Response mode">
             <option value="text">Text</option>
             <option value="voice">Voice</option>
@@ -130,12 +136,29 @@
         </section>
       </div>
     </main>
+    <script src="/static/realtime-openai-adapter.js"></script>
     <script>
       const state = {
         sessionId: null,
         callId: null,
+        provider: null,
+        clientSecret: null,
         toolCallToken: null,
+        connectionUrl: null,
         sessionConfig: null,
+        peerConnection: null,
+        dataChannel: null,
+        localStream: null,
+        remoteAudio: null,
+        isMuted: false,
+        isStarting: false,
+        activeConnectionId: 0,
+        openAIResponseInProgress: false,
+        pendingOpenAIResponseCreate: false,
+        transcriptBuffers: {
+          assistant: {},
+          user: {},
+        },
       };
 
       const el = (id) => document.getElementById(id);
@@ -146,10 +169,310 @@
         const panel = el(id);
         panel.textContent = panel.textContent ? `${panel.textContent}\n${value}` : value;
       };
+      const appendText = (id, value) => {
+        if (!value) {
+          return;
+        }
+        const panel = el(id);
+        panel.textContent = `${panel.textContent || ""}${value}`;
+      };
 
       const newId = (prefix) => `${prefix}-${crypto.randomUUID()}`;
+      const isAllowedRealtimeTool = (toolName) =>
+        Boolean(
+          state.sessionConfig &&
+            state.sessionConfig.tools.some((tool) => tool.name === toolName),
+        );
+
+      function setSessionControlsDisabled(disabled) {
+        el("start-session").disabled = disabled;
+      }
+
+      function setMuteState(isMuted) {
+        state.isMuted = isMuted;
+        if (state.localStream) {
+          state.localStream.getAudioTracks().forEach((track) => {
+            track.enabled = !state.isMuted;
+          });
+        }
+        const button = el("mute-toggle");
+        button.textContent = state.isMuted ? "Unmute" : "Mute";
+        button.setAttribute("aria-pressed", state.isMuted ? "true" : "false");
+        button.classList.toggle("is-muted", state.isMuted);
+      }
+
+      function clearSessionPanels() {
+        writePanel("transcript", "");
+        writePanel("assistant-response", "");
+        writePanel("tool-calls", "");
+        writePanel("handoff-state", "none");
+        writePanel("latency", "");
+        writePanel("provider-events", "");
+        state.transcriptBuffers = { assistant: {}, user: {} };
+      }
+
+      function parseProviderMessage(data) {
+        try {
+          return JSON.parse(data);
+        } catch (_error) {
+          appendPanel("provider-events", "provider_event_invalid_json");
+          return null;
+        }
+      }
+
+      function parseToolArguments(normalized) {
+        if (!normalized.provider_raw_arguments) {
+          return {};
+        }
+        try {
+          return JSON.parse(normalized.provider_raw_arguments);
+        } catch (_error) {
+          appendPanel("provider-events", `tool_arguments_invalid=${normalized.tool_name}`);
+          return null;
+        }
+      }
+
+      function transcriptKey(normalized) {
+        return normalized.turn_id || `${normalized.speaker || "unknown"}-${normalized.sequence || 0}`;
+      }
+
+      function finalizeTranscriptTurn(speaker, normalized) {
+        if (!normalized.text) {
+          return;
+        }
+        const key = transcriptKey(normalized);
+        const buffer = state.transcriptBuffers[speaker][key] || "";
+        if (!buffer) {
+          const line = speaker === "assistant" ? `Assistant: ${normalized.text}` : `User: ${normalized.text}`;
+          appendPanel("transcript", line);
+          if (speaker === "assistant") {
+            appendPanel("assistant-response", normalized.text);
+          }
+          return;
+        }
+        state.transcriptBuffers[speaker][key] = "";
+      }
+
+      function renderNormalizedEvent(normalized) {
+        if (!normalized || !normalized.event_type) {
+          return;
+        }
+        if (normalized.event_type === "transcript.assistant.delta") {
+          state.transcriptBuffers.assistant[transcriptKey(normalized)] =
+            `${state.transcriptBuffers.assistant[transcriptKey(normalized)] || ""}${normalized.text || ""}`;
+          appendText("assistant-response", normalized.text);
+          return;
+        }
+        if (normalized.event_type === "transcript.assistant.done") {
+          finalizeTranscriptTurn("assistant", normalized);
+          return;
+        }
+        if (normalized.event_type === "transcript.user.delta") {
+          state.transcriptBuffers.user[transcriptKey(normalized)] =
+            `${state.transcriptBuffers.user[transcriptKey(normalized)] || ""}${normalized.text || ""}`;
+          appendText("transcript", normalized.text);
+          return;
+        }
+        if (normalized.event_type === "transcript.user.done") {
+          finalizeTranscriptTurn("user", normalized);
+        }
+      }
+
+      function updateRealtimeResponseMode() {
+        const mode = el("response-mode").value;
+        if (!applyRealtimeResponseMode()) {
+          appendPanel("provider-events", `response_mode_pending=${mode}`);
+        }
+      }
+
+      function applyRealtimeResponseMode() {
+        const mode = el("response-mode").value;
+        if (!state.dataChannel || state.dataChannel.readyState !== "open") {
+          return false;
+        }
+        state.dataChannel.send(
+          JSON.stringify({
+            type: "session.update",
+            session: {
+              type: "realtime",
+              output_modalities: [mode === "voice" ? "audio" : "text"],
+            },
+          }),
+        );
+        appendPanel("provider-events", `response_mode_updated=${mode}`);
+        return true;
+      }
+
+      function trackOpenAIResponseState(event) {
+        if (!event || typeof event.type !== "string") {
+          return;
+        }
+        if (
+          event.type === "response.created" ||
+          event.type === "response.function_call_arguments.done" ||
+          event.type.startsWith("response.output")
+        ) {
+          state.openAIResponseInProgress = true;
+        }
+        if (event.type === "response.done") {
+          state.openAIResponseInProgress = false;
+          flushOpenAIResponseCreate();
+        }
+      }
+
+      function queueOpenAIResponseCreate() {
+        state.pendingOpenAIResponseCreate = true;
+        flushOpenAIResponseCreate();
+      }
+
+      function flushOpenAIResponseCreate() {
+        if (
+          !state.pendingOpenAIResponseCreate ||
+          state.openAIResponseInProgress ||
+          !state.dataChannel ||
+          state.dataChannel.readyState !== "open"
+        ) {
+          return;
+        }
+        const adapter = window.voiceAgentsOpenAIRealtimeAdapter;
+        adapter.sendOpenAIResponseCreate(state.dataChannel);
+        state.pendingOpenAIResponseCreate = false;
+        state.openAIResponseInProgress = true;
+      }
+
+      function resetRealtimeResources() {
+        state.activeConnectionId += 1;
+        const dataChannel = state.dataChannel;
+        const peerConnection = state.peerConnection;
+        const localStream = state.localStream;
+        const remoteAudio = state.remoteAudio;
+
+        if (dataChannel) {
+          dataChannel.close();
+        }
+        if (peerConnection) {
+          peerConnection.close();
+        }
+        if (localStream) {
+          localStream.getTracks().forEach((track) => {
+            track.stop();
+          });
+        }
+        if (remoteAudio) {
+          remoteAudio.pause();
+          remoteAudio.srcObject = null;
+          remoteAudio.remove();
+        }
+
+        state.peerConnection = null;
+        state.dataChannel = null;
+        state.localStream = null;
+        state.remoteAudio = null;
+        state.clientSecret = null;
+        state.toolCallToken = null;
+        state.connectionUrl = null;
+        state.sessionConfig = null;
+        state.openAIResponseInProgress = false;
+        state.pendingOpenAIResponseCreate = false;
+        setMuteState(false);
+        state.isStarting = false;
+        setSessionControlsDisabled(false);
+      }
+
+      async function setupAudioAndPeerConnection() {
+        state.localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const peerConnection = new RTCPeerConnection();
+        state.peerConnection = peerConnection;
+        state.remoteAudio = new Audio();
+        state.remoteAudio.autoplay = true;
+        state.remoteAudio.style.display = "none";
+        document.body.appendChild(state.remoteAudio);
+
+        state.localStream.getTracks().forEach((track) => {
+          track.enabled = !state.isMuted;
+          state.peerConnection.addTrack(track, state.localStream);
+        });
+
+        peerConnection.ontrack = (event) => {
+          const [remoteStream] = event.streams;
+          if (remoteStream && state.peerConnection === peerConnection) {
+            state.remoteAudio.srcObject = remoteStream;
+          }
+        };
+
+        const dataChannel = peerConnection.createDataChannel("oai-events");
+        state.dataChannel = dataChannel;
+        dataChannel.addEventListener("open", () => {
+          appendPanel("provider-events", "data_channel=open");
+          applyRealtimeResponseMode();
+        });
+        dataChannel.addEventListener("close", () => {
+          if (state.dataChannel === dataChannel) {
+            writePanel("session-state", "data_channel_closed");
+          }
+        });
+        dataChannel.addEventListener("error", () => {
+          if (state.dataChannel === dataChannel) {
+            writePanel("session-state", "data_channel_error");
+          }
+        });
+        dataChannel.addEventListener("message", (messageEvent) => {
+          const providerEvent = parseProviderMessage(messageEvent.data);
+          if (!providerEvent) {
+            return;
+          }
+          handleProviderEvent(providerEvent).catch((error) => {
+            appendPanel("provider-events", error.message);
+          });
+        });
+      }
+
+      async function connectOpenAIRealtime(connectionId) {
+        try {
+          await setupAudioAndPeerConnection();
+          const peerConnection = state.peerConnection;
+          const connectionUrl = state.connectionUrl;
+          const clientSecret = state.clientSecret;
+          if (!peerConnection || !connectionUrl || !clientSecret) {
+            throw new Error("Realtime connection is not ready.");
+          }
+          const offer = await state.peerConnection.createOffer();
+          await state.peerConnection.setLocalDescription(offer);
+          const response = await fetch(connectionUrl, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${clientSecret}`,
+              "Content-Type": "application/sdp",
+            },
+            body: offer.sdp,
+          });
+          if (!response.ok) {
+            throw new Error(`OpenAI SDP exchange failed: ${response.status}`);
+          }
+          const answerSdp = await response.text();
+          if (state.activeConnectionId !== connectionId || state.peerConnection !== peerConnection) {
+            throw new Error("Realtime connection was replaced.");
+          }
+          await peerConnection.setRemoteDescription(
+            new RTCSessionDescription({ type: "answer", sdp: answerSdp }),
+          );
+        } catch (error) {
+          if (state.activeConnectionId === connectionId) {
+            resetRealtimeResources();
+          }
+          throw error;
+        }
+      }
 
       async function startSession() {
+        if (state.isStarting) {
+          return;
+        }
+        resetRealtimeResources();
+        clearSessionPanels();
+        state.isStarting = true;
+        setSessionControlsDisabled(true);
+        const connectionId = state.activeConnectionId;
         state.sessionId = newId("session");
         state.callId = newId("call");
         writePanel("session-state", "starting");
@@ -163,7 +486,7 @@
             call_id: state.callId,
             merchant_id: "merchant-demo",
             response_mode: el("response-mode").value,
-            locale: "en-US",
+            locale: navigator.language || "en-US",
             safety_subject_id: "browser_demo_subject",
           }),
         });
@@ -171,17 +494,27 @@
         if (!response.ok) {
           writePanel("session-state", `error ${response.status}`);
           appendPanel("provider-events", await response.text());
+          state.isStarting = false;
+          setSessionControlsDisabled(false);
           return;
         }
 
         const payload = await response.json();
+        state.provider = payload.provider;
+        state.clientSecret = payload.client_secret;
         state.toolCallToken = payload.tool_call_token;
+        state.connectionUrl = payload.connection_url;
         state.sessionConfig = payload.session_config;
-        writePanel("session-state", "ready");
+        if (payload.provider === "openai_realtime") {
+          await connectOpenAIRealtime(connectionId);
+        }
+        state.isStarting = false;
+        setSessionControlsDisabled(true);
+        writePanel("session-state", payload.provider === "openai_realtime" ? "connected" : "ready");
         writePanel("latency", `${Math.round(performance.now() - startedAt)} ms`);
         appendPanel(
           "provider-events",
-          `provider=${payload.provider} model=${payload.model} tools=${payload.session_config.tools.length}`,
+          `provider=${payload.provider} model=${payload.model} tools=${payload.session_config.tools.length} response_mode=${el("response-mode").value}`,
         );
       }
 
@@ -207,6 +540,9 @@
         });
 
         const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(`Tool call failed: ${response.status}`);
+        }
         writePanel("latency", `${Math.round(performance.now() - startedAt)} ms`);
         appendPanel("tool-calls", `${toolName}: ${payload.safe_summary || response.status}`);
         if (payload.handoff_required) {
@@ -215,9 +551,84 @@
         return payload;
       }
 
+      async function relayNormalizedEvent(normalizedEvent) {
+        if (!normalizedEvent || !state.sessionId || !state.callId || !state.toolCallToken) {
+          return null;
+        }
+
+        const { provider_raw_arguments: _providerRawArguments, ...safeEvent } = normalizedEvent;
+        const response = await fetch("/v1/realtime/event", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${state.toolCallToken}`,
+          },
+          body: JSON.stringify({
+            session_id: state.sessionId,
+            call_id: state.callId,
+            merchant_id: "merchant-demo",
+            provider: state.provider,
+            latency_ms: null,
+            ...safeEvent,
+          }),
+        });
+        if (!response.ok) {
+          appendPanel("provider-events", `event_log_error=${response.status}`);
+          return null;
+        }
+        return response.json();
+      }
+
+      async function handleProviderEvent(event) {
+        trackOpenAIResponseState(event);
+        if (event.type === "error") {
+          const message = event.error && event.error.message ? event.error.message : "Provider error.";
+          appendPanel("provider-events", `provider_error=${message}`);
+        }
+        const adapter = window.voiceAgentsOpenAIRealtimeAdapter;
+        const normalized = adapter.normalizeOpenAIRealtimeEvent(event);
+        if (!normalized) {
+          return;
+        }
+        renderNormalizedEvent(normalized);
+
+        if (normalized.event_type === "tool_call.requested") {
+          if (!isAllowedRealtimeTool(normalized.tool_name)) {
+            appendPanel("provider-events", `unknown_tool=${normalized.tool_name}`);
+            return;
+          }
+          await relayNormalizedEvent(normalized);
+          const args = parseToolArguments(normalized);
+          if (args === null) {
+            return;
+          }
+          const toolResponse = await relayToolCall(normalized.tool_name, args);
+          await relayNormalizedEvent({
+            event_type: "tool_call.result",
+            state: toolResponse.handoff_required ? "handoff_pending" : "tool_calling",
+            tool_name: normalized.tool_name,
+            provider_call_id: normalized.provider_call_id,
+            tool_status: "completed",
+            safe_summary: toolResponse.safe_summary,
+            provider_event_type: "voiceagents.tool_call.result",
+          });
+          adapter.sendOpenAIToolResult(
+            state.dataChannel,
+            normalized.provider_call_id,
+            toolResponse,
+          );
+          queueOpenAIResponseCreate();
+          return;
+        }
+
+        await relayNormalizedEvent(normalized);
+      }
+
       function stopSession() {
+        resetRealtimeResources();
         state.sessionId = null;
         state.callId = null;
+        state.provider = null;
         state.toolCallToken = null;
         state.sessionConfig = null;
         writePanel("session-state", "ended");
@@ -225,18 +636,25 @@
 
       el("start-session").addEventListener("click", () => {
         startSession().catch((error) => {
+          state.isStarting = false;
+          setSessionControlsDisabled(false);
           writePanel("session-state", "error");
           appendPanel("provider-events", error.message);
         });
       });
       el("stop-session").addEventListener("click", stopSession);
       el("mute-toggle").addEventListener("click", () => {
-        const button = el("mute-toggle");
-        button.textContent = button.textContent === "Mute" ? "Unmute" : "Mute";
+        setMuteState(!state.isMuted);
+        appendPanel("provider-events", state.isMuted ? "mute_state=muted" : "mute_state=unmuted");
       });
+      el("response-mode").addEventListener("change", updateRealtimeResponseMode);
 
       window.voiceAgentsRealtimeTest = {
         relayToolCall,
+        relayNormalizedEvent,
+        handleProviderEvent,
+        connectOpenAIRealtime,
+        resetRealtimeResources,
         getSessionConfig: () => state.sessionConfig,
       };
     </script>
