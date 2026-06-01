@@ -1,10 +1,10 @@
 # VoiceAgents Pilot Validation Harness v1 Tasks
 
-Status: IMPLEMENTED
+Status: IMPLEMENTED / MERGED
 Source spec: `docs/specs/voiceagents-pilot-validation-harness-v1.md`
 Detailed TDD implementation plan: `docs/superpowers/plans/2026-06-01-pilot-validation-harness-v1.md`
 Plan review: `docs/reviews/plan-eng-review-pilot-validation-harness-v1-2026-06-01.md`
-Branch: `feat/pilot-validation-harness`
+Branch: `main` after PR #8 merge; implemented on `feat/pilot-validation-harness`
 
 This document is the project-level task tracker for the Pilot Validation Harness v1 feature. The detailed red/green/refactor steps, code snippets, and expected pytest output remain in the Superpowers implementation plan. If this task tracker and the detailed plan ever disagree, update this tracker and the detailed plan in the same docs checkpoint before coding.
 

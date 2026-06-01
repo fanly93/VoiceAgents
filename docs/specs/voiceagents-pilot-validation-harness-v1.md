@@ -1,8 +1,8 @@
 # VoiceAgents Pilot Validation Harness v1 Spec
 
-Status: IMPLEMENTED
+Status: IMPLEMENTED / MERGED
 Date: 2026-06-01
-Branch: `feat/pilot-validation-harness`
+Branch: `main` after PR #8 merge; implemented on `feat/pilot-validation-harness`
 Source design: `docs/designs/voiceagents-pilot-validation-harness-v1.md`
 
 ## Goal
