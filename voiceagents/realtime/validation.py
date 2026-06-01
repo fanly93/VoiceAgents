@@ -594,6 +594,18 @@ class ValidationRunRepository:
             )
         return sorted(runs, key=lambda run: (run.finished_at, run.run_id), reverse=True)
 
+    def load_report(self, run_id: str) -> ValidationRunReport:
+        summary_path = self._run_dir(run_id) / "summary.json"
+        if not summary_path.is_file():
+            raise ValueError("Validation summary not found")
+        try:
+            summary = ValidationRunSummary.model_validate_json(
+                summary_path.read_text(encoding="utf-8")
+            )
+        except Exception as error:
+            raise ValueError("Validation summary is malformed") from error
+        return build_validation_run_report(summary)
+
     def _run_dir(self, run_id: str) -> Path:
         if not RUN_ID_RE.fullmatch(run_id):
             raise ValueError("Invalid validation run id")

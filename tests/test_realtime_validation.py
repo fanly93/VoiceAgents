@@ -328,6 +328,65 @@ def test_list_saved_runs_skips_malformed_summaries(tmp_path) -> None:
     assert [run.run_id for run in runs] == ["vrun-20260601-120000-abcdef12"]
 
 
+def test_load_report_returns_safe_report_for_run_id(tmp_path) -> None:
+    root = tmp_path / "validation-runs"
+    summary = make_summary(run_id="vrun-20260601-120000-abcdef12")
+    run_dir = root / summary.run_id
+    run_dir.mkdir(parents=True)
+    (run_dir / "summary.json").write_text(
+        json.dumps(summary.model_dump(mode="json")),
+        encoding="utf-8",
+    )
+
+    report = ValidationRunRepository(root).load_report(summary.run_id)
+
+    assert report.run_id == summary.run_id
+    assert report.readiness == "ready_for_pilot"
+    assert report.scenario.scenario_id == "order_status"
+
+
+def test_load_report_rejects_path_like_run_id(tmp_path) -> None:
+    repository = ValidationRunRepository(tmp_path / "validation-runs")
+
+    with pytest.raises(ValueError, match="Invalid validation run id"):
+        repository.load_report("../escape")
+
+
+def test_load_report_errors_when_summary_is_missing_or_malformed(tmp_path) -> None:
+    root = tmp_path / "validation-runs"
+    missing_summary_dir = root / "vrun-20260601-120000-abcdef12"
+    malformed_summary_dir = root / "vrun-20260601-130000-bcdefa23"
+    missing_summary_dir.mkdir(parents=True)
+    malformed_summary_dir.mkdir(parents=True)
+    (malformed_summary_dir / "summary.json").write_text("{not-json", encoding="utf-8")
+
+    repository = ValidationRunRepository(root)
+
+    with pytest.raises(ValueError, match="Validation summary not found"):
+        repository.load_report("vrun-20260601-120000-abcdef12")
+    with pytest.raises(ValueError, match="Validation summary is malformed"):
+        repository.load_report("vrun-20260601-130000-bcdefa23")
+
+
+def test_load_report_rejects_serialized_report_with_blocked_tokens(tmp_path) -> None:
+    root = tmp_path / "validation-runs"
+    summary = with_check(
+        make_summary(run_id="vrun-20260601-120000-abcdef12"),
+        "manual_business_confirmed",
+        passed=False,
+        detail="Authorization header leaked",
+    )
+    run_dir = root / summary.run_id
+    run_dir.mkdir(parents=True)
+    (run_dir / "summary.json").write_text(
+        json.dumps(summary.model_dump(mode="json")),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="blocked tokens"):
+        ValidationRunRepository(root).load_report(summary.run_id)
+
+
 def test_validation_repository_creates_safe_run_paths(tmp_path) -> None:
     repository = ValidationRunRepository(tmp_path / "validation-runs")
 
