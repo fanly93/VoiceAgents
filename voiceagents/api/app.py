@@ -62,6 +62,9 @@ from voiceagents.realtime.validation import (
 
 
 REALTIME_TEST_PAGE_PATH = Path(__file__).parent / "static" / "realtime-test.html"
+REALTIME_VALIDATION_REPORTS_PAGE_PATH = (
+    Path(__file__).parent / "static" / "realtime-validation-reports.html"
+)
 REALTIME_OPENAI_ADAPTER_PATH = Path(__file__).parent / "static" / "realtime-openai-adapter.js"
 DEFAULT_REALTIME_CLIENT_SECRET_RATE_LIMIT = 20
 
@@ -108,6 +111,10 @@ def create_app(
     @app.get("/realtime-test")
     def realtime_test_page() -> FileResponse:
         return FileResponse(REALTIME_TEST_PAGE_PATH, media_type="text/html")
+
+    @app.get("/realtime-validation-reports")
+    def realtime_validation_reports_page() -> FileResponse:
+        return FileResponse(REALTIME_VALIDATION_REPORTS_PAGE_PATH, media_type="text/html")
 
     @app.get("/static/realtime-openai-adapter.js")
     def realtime_openai_adapter() -> FileResponse:
