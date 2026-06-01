@@ -6,7 +6,7 @@
 
 ## 一句话状态
 
-OpenAI Realtime 真实语音 MVP、failure-mode 验证、真实语音手动验证和 Pilot Validation Harness v1 都已经完成并合并到 `main`。当前 post-merge archive 只记录最终状态、验证证据和下一阶段产品切口。
+OpenAI Realtime 真实语音 MVP、failure-mode 验证、真实语音手动验证、Pilot Validation Harness v1 和本地 validation report viewer 都已经完成。当前文档记录最终状态、验证证据和下一阶段产品切口。
 
 ## 当前 Git 状态
 
@@ -165,14 +165,18 @@ Status: IMPLEMENTED / MERGED
 - `GET /v1/realtime/validation-scenarios`
 - `POST /v1/realtime/validation-runs`
 - `POST /v1/realtime/validation-runs/{run_id}/finish`
+- `GET /v1/realtime/validation-report-runs`
+- `GET /v1/realtime/validation-report-runs/{run_id}`
 - server-generated `run_id`
 - 本地 path-safe repository
 - 自动 pass/fail checks
 - 脱敏 summary/report 写入
+- 从 `.voiceagents/validation-runs/<run_id>/summary.json` 读取本地 report viewer summary
 
 前端新增：
 
 - `/realtime-test` 的 Validation Run 区域。
+- `/realtime-validation-reports` 本地 validation report viewer。
 - scenario selector。
 - `Start Validation Run`。
 - `Finish Run`。
@@ -210,6 +214,8 @@ tests/test_realtime_test_page_failure_modes.py
 ```
 
 ### 安全边界
+
+Validation report viewer v1 是 local-only 工具，只读取本机 `.voiceagents/validation-runs/` 产物。它没有 public sharing、auth、上传、托管导出或生产 report portal；试点/demo 前的 report prep 目标是 1-3 分钟内在本地完成。
 
 Validation Harness 不保存：
 
@@ -260,7 +266,7 @@ git diff --check
 ### Follow-up
 
 - Validation Harness v1 还没有 CLI。
-- 还没有商家可读的漂亮报告页面。
+- Validation report viewer v1 只解决本地查看和 1-3 分钟 report prep；还没有 public sharing/auth 或生产 report portal。
 - 还没有客服后台接手页面。
 - 真实浏览器自动化的 fake microphone 路线仍不稳定；真实语音验证仍建议用真实麦克风或手机播放辅助。
 
@@ -270,7 +276,7 @@ git diff --check
 
 推荐切口：
 
-1. Pilot demo report viewer：把本地 report 变成更适合试点商家看的页面。
+1. Pilot demo report sharing/auth：在本地 viewer 之后，设计 public sharing、auth 和生产托管边界。
 2. Human handoff context viewer：把转人工上下文整理成客服可接手的结构。
 3. Validation scenario runner v2：把五个场景做成更明确的 guided workflow。
 
@@ -314,7 +320,7 @@ ORD-20260601-1842
 .voiceagents/validation-runs/<run_id>/
 ```
 
-这是本地输出，不提交。
+这是 local-only 输出，`.voiceagents/validation-runs/` remains gitignored，不提交。当前本地 viewer URL 是 `/realtime-validation-reports`，读取 `summary.json`；v1 没有 public sharing/auth。
 
 ### 5. 浏览器音频自动化
 
