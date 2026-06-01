@@ -54,6 +54,7 @@ from voiceagents.realtime.validation import (
     ValidationRunListItem,
     ValidationRunFinishRequest,
     ValidationRunFinishResponse,
+    ValidationRunReport,
     ValidationRunRepository,
     ValidationRunStartRequest,
     ValidationRunStartResponse,
@@ -138,6 +139,14 @@ def create_app(
     @app.get("/v1/realtime/validation-report-runs")
     def list_realtime_validation_report_runs() -> list[ValidationRunListItem]:
         return validation_repository.list_saved_runs()
+
+    @app.get("/v1/realtime/validation-report-runs/{run_id}")
+    def get_realtime_validation_report_run(run_id: str) -> ValidationRunReport:
+        try:
+            return validation_repository.load_report(run_id)
+        except ValueError as error:
+            status_code = 404 if "not found" in str(error) else 400
+            raise HTTPException(status_code=status_code, detail=str(error)) from error
 
     @app.post("/v1/realtime/client-secret")
     def create_realtime_client_secret(

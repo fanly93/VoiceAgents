@@ -136,3 +136,33 @@ def test_validation_report_runs_endpoint_lists_saved_runs(tmp_path) -> None:
     assert body[0]["readiness"] == "ready_for_pilot"
     assert "summary_path" not in body[0]
     assert "report_path" not in body[0]
+
+
+def test_validation_report_detail_endpoint_returns_decision_report(tmp_path) -> None:
+    client = make_client(tmp_path)
+    started = client.post("/v1/realtime/validation-runs", json=make_start_payload()).json()
+    client.post(
+        f"/v1/realtime/validation-runs/{started['run_id']}/finish",
+        json=make_finish_payload(),
+    )
+
+    response = client.get(f"/v1/realtime/validation-report-runs/{started['run_id']}")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["run_id"] == started["run_id"]
+    assert body["readiness"] == "ready_for_pilot"
+    assert body["decision_summary"]["label"] == "可以继续推进试点"
+    assert body["copy_summary"]["text"].startswith("试点演示验证结果：")
+    assert "summary_path" not in body
+    assert "report_path" not in body
+
+
+def test_validation_report_detail_rejects_bad_or_missing_run_id(tmp_path) -> None:
+    client = make_client(tmp_path)
+
+    path_like = client.get("/v1/realtime/validation-report-runs/../escape")
+    missing = client.get("/v1/realtime/validation-report-runs/vrun-20260601-120000-abcdef12")
+
+    assert path_like.status_code in {400, 404, 422}
+    assert missing.status_code == 404
