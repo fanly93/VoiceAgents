@@ -383,16 +383,19 @@ def _report_evidence(summary: ValidationRunSummary) -> list[str]:
     check_lookup = {check.name: check.passed for check in summary.checks}
     return [
         "语音确认：通过" if summary.manual_assertions.heard_voice else "语音确认：未通过",
-        "业务回答：通过"
-        if summary.manual_assertions.business_answer_acceptable
-        or summary.manual_assertions.demo_ready
-        else "业务回答：未通过",
+        "业务回答：通过" if check_lookup.get("manual_business_confirmed", False) else "业务回答：未通过",
         "工具调用：通过"
         if check_lookup.get("expected_tools_observed", False)
         else "工具调用：未通过",
+        "转人工：通过"
+        if check_lookup.get("expected_handoff_observed", False)
+        else "转人工：未通过",
         "系统错误：未发现"
         if check_lookup.get("provider_errors_absent", False)
         else "系统错误：已发现",
+        "安全扫描：通过"
+        if check_lookup.get("blocked_secret_scan_passed", False)
+        else "安全扫描：未通过",
     ]
 
 
@@ -514,7 +517,7 @@ class ValidationRunRepository:
         summary_path = run_dir / "summary.json"
         report_path = run_dir / "report.md"
         redacted_payload = _redact_finish_request(request)
-        checks = evaluate_validation_checks(scenario, request)
+        checks = _scrub_validation_checks(evaluate_validation_checks(scenario, request))
         finished_at = datetime.now(timezone.utc).isoformat()
 
         preliminary_summary = ValidationRunSummary(
@@ -568,17 +571,21 @@ class ValidationRunRepository:
             return []
 
         runs: list[ValidationRunListItem] = []
-        for run_dir in self._root.iterdir():
-            if not run_dir.is_dir() or not RUN_ID_RE.fullmatch(run_dir.name):
+        for candidate_dir in self._root.iterdir():
+            if not candidate_dir.is_dir() or not RUN_ID_RE.fullmatch(candidate_dir.name):
                 continue
-            summary_path = run_dir / "summary.json"
-            if not summary_path.is_file():
+            try:
+                run_dir = self._run_dir(candidate_dir.name)
+                summary_path = self._summary_path(candidate_dir.name)
+            except ValueError:
                 continue
             try:
                 summary = ValidationRunSummary.model_validate_json(
                     summary_path.read_text(encoding="utf-8")
                 )
             except Exception:
+                continue
+            if summary.run_id != run_dir.name or not RUN_ID_RE.fullmatch(summary.run_id):
                 continue
             scenario = SCENARIOS_BY_ID.get(summary.scenario_id)
             runs.append(
@@ -595,7 +602,7 @@ class ValidationRunRepository:
         return sorted(runs, key=lambda run: (run.finished_at, run.run_id), reverse=True)
 
     def load_report(self, run_id: str) -> ValidationRunReport:
-        summary_path = self._run_dir(run_id) / "summary.json"
+        summary_path = self._summary_path(run_id)
         if not summary_path.is_file():
             raise ValueError("Validation summary not found")
         try:
@@ -604,6 +611,8 @@ class ValidationRunRepository:
             )
         except Exception as error:
             raise ValueError("Validation summary is malformed") from error
+        if summary.run_id != run_id or not RUN_ID_RE.fullmatch(summary.run_id):
+            raise ValueError("Validation summary run id mismatch")
         return build_validation_run_report(summary)
 
     def _run_dir(self, run_id: str) -> Path:
@@ -614,6 +623,14 @@ class ValidationRunRepository:
         if root != run_dir and root not in run_dir.parents:
             raise ValueError("Validation run path escaped root")
         return run_dir
+
+    def _summary_path(self, run_id: str) -> Path:
+        root = self._root.resolve()
+        summary_path = self._run_dir(run_id) / "summary.json"
+        resolved_summary_path = summary_path.resolve()
+        if root != resolved_summary_path and root not in resolved_summary_path.parents:
+            raise ValueError("Validation summary path escaped root")
+        return summary_path
 
 
 def _new_run_id() -> str:
@@ -648,6 +665,15 @@ def _scrub_blocked_tokens(value):
     if isinstance(value, dict):
         return {key: _scrub_blocked_tokens(nested) for key, nested in value.items()}
     return value
+
+
+def _scrub_validation_checks(checks: list[ValidationCheck]) -> list[ValidationCheck]:
+    scrubbed_checks: list[ValidationCheck] = []
+    for check in checks:
+        redacted_detail = redact_text(check.detail).value
+        scrubbed_detail = _scrub_blocked_tokens(redacted_detail)
+        scrubbed_checks.append(check.model_copy(update={"detail": scrubbed_detail}))
+    return scrubbed_checks
 
 
 def _blocked_secret_scan(payload: dict[str, object]) -> bool:
