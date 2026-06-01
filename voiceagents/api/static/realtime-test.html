@@ -656,6 +656,18 @@
         connectOpenAIRealtime,
         resetRealtimeResources,
         getSessionConfig: () => state.sessionConfig,
+        getDebugState: () => ({
+          activeConnectionId: state.activeConnectionId,
+          isStarting: state.isStarting,
+          hasClientSecret: Boolean(state.clientSecret),
+          hasToolCallToken: Boolean(state.toolCallToken),
+          hasConnectionUrl: Boolean(state.connectionUrl),
+          hasSessionConfig: Boolean(state.sessionConfig),
+          hasPeerConnection: Boolean(state.peerConnection),
+          hasDataChannel: Boolean(state.dataChannel),
+          hasLocalStream: Boolean(state.localStream),
+          hasRemoteAudio: Boolean(state.remoteAudio),
+        }),
       };
     </script>
   </body>
