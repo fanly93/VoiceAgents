@@ -203,12 +203,55 @@
         error: null,
       };
 
+      const elements = {
+        runList: document.getElementById("run-list"),
+        emptyState: document.getElementById("empty-state"),
+        errorState: document.getElementById("error-state"),
+      };
+
+      function setHidden(element, hidden) {
+        element.classList.toggle("hidden", hidden);
+      }
+
       async function loadRuns() {
-        return fetch("/v1/realtime/validation-report-runs");
+        try {
+          const response = await fetch("/v1/realtime/validation-report-runs");
+          if (!response.ok) {
+            throw new Error(`Failed to load runs: ${response.status}`);
+          }
+          state.runs = await response.json();
+          state.error = null;
+          renderRunList();
+          return state.runs;
+        } catch (error) {
+          state.runs = [];
+          state.error = error;
+          elements.runList.replaceChildren();
+          setHidden(elements.emptyState, true);
+          setHidden(elements.errorState, false);
+          return [];
+        }
+      }
+
+      function renderRunList() {
+        elements.runList.replaceChildren();
+        for (const run of state.runs) {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "run-item";
+          button.textContent = `${run.scenario_label} · ${run.readiness}`;
+          button.setAttribute("data-run-id", run.run_id);
+          button.setAttribute("aria-selected", run.run_id === state.selectedRunId ? "true" : "false");
+          elements.runList.appendChild(button);
+        }
+        setHidden(elements.emptyState, state.runs.length !== 0);
+        setHidden(elements.errorState, true);
       }
 
       window.voiceAgentsValidationReports = {
         loadRuns,
+        renderRunList,
+        getState: () => ({ ...state }),
       };
     </script>
   </body>
