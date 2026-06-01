@@ -1,7 +1,7 @@
 # VoiceAgents Pilot Demo Report Viewer Spec
 
-Status: DRAFT
-Date: 2026-06-01
+Status: REVIEWED / READY FOR IMPLEMENTATION
+Date: 2026-06-02
 Branch: `feat/pilot-demo-report-viewer`
 Source design: `docs/designs/voiceagents-pilot-demo-report-viewer.md`
 
@@ -34,6 +34,7 @@ Primary operator:
 - No merchant-facing SaaS dashboard.
 - No customer-service back office workflow.
 - No PDF export in v1.
+- No multi-run report packet in v1.
 - No new realtime validation capture workflow.
 - No raw audio, SDP, API key, client secret, tool token, Authorization header, raw tool arguments, real PII, or unredacted transcript rendering.
 
@@ -126,7 +127,6 @@ Response fields per item:
 - `readiness`
 - `started_at`
 - `finished_at`
-- `summary_path`
 
 Sort order:
 
@@ -153,6 +153,8 @@ Response fields:
 
 Invalid or path-like `run_id` values must not escape `.voiceagents/validation-runs/`.
 
+The API must not expose absolute local filesystem paths. If a path label is needed for local debugging, it must be repository-relative, for example `.voiceagents/validation-runs/<run_id>/summary.json`.
+
 ## UI Scope
 
 Add a local static page:
@@ -167,6 +169,7 @@ Required UI:
 
 - recent run list,
 - selected run detail,
+- newest run auto-selected when runs exist,
 - top readiness banner,
 - three conclusion cards or sections:
   - Overall readiness,
@@ -192,7 +195,7 @@ What can I copy and send?
 
 ## Copy Summary Requirements
 
-The copy summary is part of the product, not decoration.
+The copy summary is part of the product, not decoration. It is Chinese-first because the current forwarding workflow is WeChat/Feishu.
 
 It must be short enough for WeChat/Feishu and include:
 
@@ -205,13 +208,13 @@ It must be short enough for WeChat/Feishu and include:
 Example shape:
 
 ```text
-VoiceAgents demo validation: Ready for pilot.
-Scenario: Order status lookup.
-Evidence: voice confirmed, business answer accepted, expected tool lookup_order observed, no provider errors, secret scan passed.
-Next: OK to share with pilot stakeholder for feedback.
+VoiceAgents 语音 Demo 验证：可以继续推进试点。
+场景：订单状态查询。
+证据：已确认有语音输出，业务回答可接受，命中 lookup_order 工具，无 provider 错误，脱敏安全扫描通过。
+下一步：可以发给试点决策人收集反馈。
 ```
 
-Chinese copy may be added if implementation scope allows, but v1 can start with one clear English template if tests lock the content.
+English helper labels may be added if implementation scope allows, but v1 must lock one clear Chinese template in tests.
 
 ## Safety Requirements
 

@@ -1,8 +1,9 @@
 # VoiceAgents Pilot Demo Report Viewer Tasks
 
-Status: DRAFT
+Status: REVIEWED / READY FOR IMPLEMENTATION
 Source spec: `docs/specs/voiceagents-pilot-demo-report-viewer.md`
 Source design: `docs/designs/voiceagents-pilot-demo-report-viewer.md`
+Consistency review: `docs/reviews/autoplan-pilot-demo-report-viewer-2026-06-02.md`
 Branch: `feat/pilot-demo-report-viewer`
 
 This document is the project-level task tracker for the Pilot Demo Report Viewer. The implementation must remain local-only, restrained, easy to understand, and safe to forward.
@@ -13,7 +14,8 @@ Rules:
 - Do not use system Python.
 - Do not save or render raw audio, SDP, client secrets, API keys, tool tokens, Authorization headers, raw tool arguments, real PII, or unredacted transcripts.
 - Do not commit `.voiceagents/validation-runs/` output artifacts.
-- Avoid flashy frontend work; prioritize readable information architecture and copyable summaries.
+- Avoid flashy frontend work; prioritize readable information architecture and Chinese-first copyable summaries.
+- Keep v1 to one selected run at a time. Multi-run packets are deferred.
 - Keep each task small enough for a focused test and checkpoint commit.
 
 ---
@@ -65,6 +67,7 @@ Outputs:
 - audience sections
 - copy summary text
 - warning list for failed checks
+- no absolute local filesystem paths in report responses
 
 Validation:
 
@@ -97,6 +100,7 @@ Purpose: let the viewer find recent local validation runs.
 Outputs:
 
 - repository method to list saved runs newest first
+- newest run can be selected by the UI without a separate endpoint
 - graceful behavior when root directory does not exist
 - malformed run directories skipped or surfaced safely
 
@@ -200,6 +204,7 @@ Primary files:
 
 - Create `voiceagents/api/static/realtime-validation-reports.html`
 - Modify `voiceagents/api/app.py`
+- Create `tests/test_api_realtime_validation_report_page.py`
 - Create `tests/test_realtime_validation_report_page.py`
 - Extend API/static page tests as needed
 
@@ -228,13 +233,13 @@ Required shell elements:
 Validation:
 
 ```bash
-./.venv/bin/python -m pytest tests/test_api_realtime_test_page.py -k "validation_reports" -v
+./.venv/bin/python -m pytest tests/test_api_realtime_validation_report_page.py -k "validation_reports" -v
 ```
 
 Checkpoint:
 
 ```bash
-git add voiceagents/api/app.py voiceagents/api/static/realtime-validation-reports.html tests/test_api_realtime_test_page.py
+git add voiceagents/api/app.py voiceagents/api/static/realtime-validation-reports.html tests/test_api_realtime_validation_report_page.py
 git commit -m "feat: serve validation report viewer"
 ```
 
@@ -292,7 +297,7 @@ Outputs:
 - visible copy summary text
 - copy button
 - browser test for copied text or fallback selectable text
-- summary includes scenario, readiness, evidence, and next action
+- Chinese-first summary includes scenario, readiness, evidence, and next action
 
 Validation:
 
@@ -367,7 +372,7 @@ Review focus:
 - path-safe summary reads,
 - no blocked data rendered,
 - no public sharing assumptions,
-- copy summary is clear enough for non-engineering readers,
+- Chinese-first copy summary is clear enough for non-engineering readers,
 - UI remains simple and operational.
 
 After review:

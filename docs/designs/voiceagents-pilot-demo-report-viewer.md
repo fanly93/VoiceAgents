@@ -1,14 +1,14 @@
 # VoiceAgents Pilot Demo Report Viewer
 
-Status: APPROVED FOR SPEC
-Date: 2026-06-01
+Status: REVIEWED / READY FOR IMPLEMENTATION
+Date: 2026-06-02
 Branch: `feat/pilot-demo-report-viewer`
 
 ## Problem Statement
 
 The current realtime validation workflow can produce local `summary.json` and `report.md` artifacts, but those artifacts are still hard to consume quickly. After a voice demo, the operator currently screenshots the demo page and manually summarizes the result into WeChat or Feishu. That takes about 30 minutes and makes the demo evidence hard for non-engineering readers to understand.
 
-The next product cut is a local Pilot Demo Report Viewer: a simple, readable page that turns one or more validation runs into a decision-friendly report.
+The next product cut is a local Pilot Demo Report Viewer: a simple, readable page that turns one saved validation run into a decision-friendly report, with a recent-run list for navigation.
 
 ## Demand Evidence
 
@@ -47,12 +47,12 @@ Secondary readers:
 
 Narrowest wedge:
 
-- A local report viewer page that reads existing validation summaries and presents a single run with:
+- A local report viewer page that reads existing validation summaries, auto-selects the newest run when present, and presents one selected run with:
   - overall readiness,
   - scenario coverage,
   - business proof,
   - role-specific sections,
-  - copyable WeChat/Feishu summary text.
+  - copyable Chinese-first WeChat/Feishu summary text.
 
 The first version should reduce post-demo report preparation from about 30 minutes to 1-3 minutes.
 
@@ -155,12 +155,12 @@ This matches the actual pain: after a demo, the operator needs a clear, local, c
 - Existing local FastAPI/static page patterns.
 - Existing redaction and blocked-field boundaries.
 
-## Open Questions
+## Resolved Scope Decisions
 
-- Should the viewer default to the latest run or show the run list first?
-- Should v1 support selecting several runs for a multi-scenario packet, or only one run at a time?
-- Should copyable text include English labels, Chinese labels, or both?
-- Should readiness be derived only from checks, or can manual `demo_ready` override non-critical failures?
+- Default state: show the run list and auto-select the newest run when one exists.
+- Run scope: v1 shows one selected run at a time. Multi-run packets are explicitly deferred.
+- Copy language: v1 summary is Chinese-first for WeChat/Feishu forwarding; optional English labels can appear only if they do not add complexity.
+- Readiness authority: readiness is derived from validation checks and safety state. Manual `demo_ready` participates through existing validation checks but cannot override failed safety, provider-error, or expected-tool checks.
 
 ## The Assignment
 
