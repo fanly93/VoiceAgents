@@ -15,6 +15,7 @@ Real pilot call recordings are not available yet, so real-call evaluation is def
 - Run local HTTP end-to-end examples against the backend skeleton.
 - Validate browser/local realtime voice session plumbing with mock-safe provider behavior.
 - Operate and validate the merged OpenAI Realtime browser voice MVP behind a local development gate.
+- Save local redacted realtime validation reports from `/realtime-test` for standard pilot scenarios.
 
 ## Out of Scope for the Current Phase
 
@@ -133,6 +134,33 @@ Run the realtime smoke test against a running mock-mode server:
 ```
 
 The realtime smoke script is intentionally mock-mode only. It validates `/health`, client-secret minting, the four approved tool calls, unknown tool rejection, and missing authorization rejection without requiring `OPENAI_API_KEY`. Real OpenAI voice verification is manual; use `docs/specs/voiceagents-openai-realtime-voice-mvp-manual-checklist.md` for the 3 minute `/realtime-test` run and browser failure-mode checks.
+
+### Local Realtime Validation Reports
+
+The `/realtime-test` page includes a local validation harness for five standard scenarios:
+
+- order status lookup
+- logistics tracking lookup
+- product knowledge consultation
+- knowledge miss handoff
+- customer requested human
+
+Use `Start` to create or connect a realtime session, then use `Start Validation Run` before the scenario you want to capture. After the conversation finishes, set the manual assertions and click `Finish Run`.
+
+The API writes redacted local artifacts:
+
+```text
+.voiceagents/validation-runs/<run_id>/summary.json
+.voiceagents/validation-runs/<run_id>/report.md
+```
+
+The `.voiceagents/` directory is gitignored and must not be committed. Saved validation artifacts must not contain raw audio, SDP, API keys, client secrets, tool tokens, Authorization headers, raw tool arguments, real PII, or unredacted transcripts.
+
+Focused validation harness tests:
+
+```bash
+./.venv/bin/python -m pytest tests/test_realtime_validation.py tests/test_api_realtime_validation.py tests/test_realtime_test_page_validation_flow.py -v
+```
 
 Validate example payload compatibility without starting a server:
 

@@ -234,6 +234,9 @@ function makeHarness(options = {}) {
     },
     fetch: async (url, request = {}) => {
       fetchCalls.push({ url: String(url), request });
+      if (String(url) === "/v1/realtime/validation-scenarios") {
+        return response({ json: [] });
+      }
       if (options.fetch) {
         return options.fetch(String(url), request, fetchCalls.length);
       }
@@ -291,16 +294,19 @@ function makeHarness(options = {}) {
     assert(!debug.hasRemoteAudio, "client-secret failure should not retain remote audio");
   }
 
-  {
-    const harness = makeHarness({ getUserMediaRejects: true });
-    await harness.click("start-session");
-    assert(harness.panel("session-state") === "error", "permission denial should show generic error state");
-    assert(harness.fetchCalls.length === 1, "permission denial should not call OpenAI SDP endpoint");
-    const debug = harness.debug();
-    assert(!debug.hasClientSecret, "permission denial should clear client secret");
-    assert(!debug.hasPeerConnection, "permission denial should not retain peer connection");
-    assert(!debug.hasLocalStream, "permission denial should not retain local stream");
-  }
+    {
+      const harness = makeHarness({ getUserMediaRejects: true });
+      await harness.click("start-session");
+      assert(harness.panel("session-state") === "error", "permission denial should show generic error state");
+    assert(
+      !harness.fetchCalls.some((call) => call.url === "https://api.openai.test/v1/realtime/calls"),
+      "permission denial should not call OpenAI SDP endpoint",
+    );
+      const debug = harness.debug();
+      assert(!debug.hasClientSecret, "permission denial should clear client secret");
+      assert(!debug.hasPeerConnection, "permission denial should not retain peer connection");
+      assert(!debug.hasLocalStream, "permission denial should not retain local stream");
+    }
 
   {
     const harness = makeHarness({
