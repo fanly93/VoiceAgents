@@ -22,7 +22,7 @@ PROVIDER_ERROR_MARKERS = (
     "data_channel_error",
     "OpenAI SDP exchange failed",
 )
-BLOCKED_REPORT_TOKENS = tuple(
+BLOCKED_REPORT_FIELD_NAMES = tuple(
     sorted(
         {
             *BLOCKED_EVENT_KEYS,
@@ -35,6 +35,11 @@ BLOCKED_REPORT_TOKENS = tuple(
         key=len,
         reverse=True,
     )
+)
+BLOCKED_REPORT_TEXT_TOKENS = tuple(
+    token
+    for token in BLOCKED_REPORT_FIELD_NAMES
+    if token not in {"audio", "arguments"}
 )
 
 
@@ -374,11 +379,19 @@ def _redact_finish_request(request: ValidationRunFinishRequest) -> dict[str, obj
 
 def _scrub_blocked_tokens(value):
     if isinstance(value, str):
-        if any(re.search(re.escape(token), value, flags=re.IGNORECASE) for token in BLOCKED_REPORT_TOKENS):
+        if any(
+            re.search(re.escape(token), value, flags=re.IGNORECASE)
+            for token in BLOCKED_REPORT_TEXT_TOKENS
+        ):
             return "[BLOCKED_REDACTED]"
         scrubbed = value
-        for token in BLOCKED_REPORT_TOKENS:
-            scrubbed = re.sub(re.escape(token), "[BLOCKED_REDACTED]", scrubbed, flags=re.IGNORECASE)
+        for token in BLOCKED_REPORT_TEXT_TOKENS:
+            scrubbed = re.sub(
+                re.escape(token),
+                "[BLOCKED_REDACTED]",
+                scrubbed,
+                flags=re.IGNORECASE,
+            )
         return scrubbed
     if isinstance(value, list):
         return [_scrub_blocked_tokens(item) for item in value]
@@ -391,7 +404,7 @@ def _blocked_secret_scan(payload: dict[str, object]) -> bool:
     if find_blocked_event_keys(payload):
         return False
     serialized = json.dumps(payload, ensure_ascii=False)
-    return not any(token in serialized for token in BLOCKED_REPORT_TOKENS)
+    return not any(token in serialized for token in BLOCKED_REPORT_FIELD_NAMES)
 
 
 def _render_report(summary: ValidationRunSummary) -> str:

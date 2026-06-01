@@ -162,6 +162,21 @@ def test_validation_summary_is_redacted_before_write(tmp_path) -> None:
     assert finished.checks[-1].name == "blocked_secret_scan_passed"
 
 
+def test_validation_summary_preserves_safe_audio_event_names(tmp_path) -> None:
+    repository = ValidationRunRepository(tmp_path / "validation-runs")
+    started = repository.start_run(make_start_request())
+
+    repository.finish_run(
+        started.run_id,
+        make_finish_request(provider_events=["response.output_audio_transcript.done"]),
+    )
+
+    summary_text = (tmp_path / "validation-runs" / started.run_id / "summary.json").read_text(
+        encoding="utf-8"
+    )
+    assert "response.output_audio_transcript.done" in summary_text
+
+
 def test_validation_report_contains_redacted_status_and_checks(tmp_path) -> None:
     repository = ValidationRunRepository(tmp_path / "validation-runs")
     started = repository.start_run(make_start_request())
