@@ -257,6 +257,18 @@ class ValidationRunReport(BaseModel):
     warnings: list[str]
 
 
+class ValidationRunListItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    run_id: str = Field(min_length=1)
+    scenario_id: str = Field(min_length=1)
+    scenario_label: str = Field(min_length=1)
+    status: Literal["pass", "fail"]
+    readiness: ValidationReportReadiness
+    started_at: str = Field(min_length=1)
+    finished_at: str = Field(min_length=1)
+
+
 def derive_validation_report_readiness(
     summary: ValidationRunSummary,
 ) -> ValidationReportReadiness:
@@ -550,6 +562,37 @@ class ValidationRunRepository:
             report_path=report_path.as_posix(),
             checks=checks,
         )
+
+    def list_saved_runs(self) -> list[ValidationRunListItem]:
+        if not self._root.exists():
+            return []
+
+        runs: list[ValidationRunListItem] = []
+        for run_dir in self._root.iterdir():
+            if not run_dir.is_dir() or not RUN_ID_RE.fullmatch(run_dir.name):
+                continue
+            summary_path = run_dir / "summary.json"
+            if not summary_path.is_file():
+                continue
+            try:
+                summary = ValidationRunSummary.model_validate_json(
+                    summary_path.read_text(encoding="utf-8")
+                )
+            except Exception:
+                continue
+            scenario = SCENARIOS_BY_ID.get(summary.scenario_id)
+            runs.append(
+                ValidationRunListItem(
+                    run_id=summary.run_id,
+                    scenario_id=summary.scenario_id,
+                    scenario_label=scenario.label if scenario is not None else summary.scenario_id,
+                    status=summary.status,
+                    readiness=derive_validation_report_readiness(summary),
+                    started_at=summary.started_at,
+                    finished_at=summary.finished_at,
+                )
+            )
+        return sorted(runs, key=lambda run: (run.finished_at, run.run_id), reverse=True)
 
     def _run_dir(self, run_id: str) -> Path:
         if not RUN_ID_RE.fullmatch(run_id):

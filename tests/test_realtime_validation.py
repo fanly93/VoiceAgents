@@ -274,6 +274,60 @@ def test_report_view_does_not_expose_absolute_local_paths() -> None:
     assert "report_path" not in report_payload
 
 
+def test_list_saved_runs_returns_empty_when_root_is_missing(tmp_path) -> None:
+    repository = ValidationRunRepository(tmp_path / "missing-validation-runs")
+
+    assert repository.list_saved_runs() == []
+
+
+def test_list_saved_runs_returns_newest_first_without_paths(tmp_path) -> None:
+    root = tmp_path / "validation-runs"
+    older = make_summary(
+        run_id="vrun-20260601-120000-abcdef12",
+        finished_at="2026-06-01T12:01:00+00:00",
+    )
+    newer = make_summary(
+        run_id="vrun-20260601-130000-bcdefa23",
+        finished_at="2026-06-01T13:01:00+00:00",
+    )
+    for summary in [older, newer]:
+        run_dir = root / summary.run_id
+        run_dir.mkdir(parents=True)
+        (run_dir / "summary.json").write_text(
+            json.dumps(summary.model_dump(mode="json")),
+            encoding="utf-8",
+        )
+    (root / "notes").mkdir()
+
+    runs = ValidationRunRepository(root).list_saved_runs()
+
+    assert [run.run_id for run in runs] == [
+        "vrun-20260601-130000-bcdefa23",
+        "vrun-20260601-120000-abcdef12",
+    ]
+    assert runs[0].scenario_label == "Order status lookup"
+    assert runs[0].readiness == "ready_for_pilot"
+    assert "path" not in runs[0].model_dump(mode="json")
+
+
+def test_list_saved_runs_skips_malformed_summaries(tmp_path) -> None:
+    root = tmp_path / "validation-runs"
+    valid = make_summary(run_id="vrun-20260601-120000-abcdef12")
+    valid_dir = root / valid.run_id
+    bad_dir = root / "vrun-20260601-130000-bcdefa23"
+    valid_dir.mkdir(parents=True)
+    bad_dir.mkdir(parents=True)
+    (valid_dir / "summary.json").write_text(
+        json.dumps(valid.model_dump(mode="json")),
+        encoding="utf-8",
+    )
+    (bad_dir / "summary.json").write_text("{not-json", encoding="utf-8")
+
+    runs = ValidationRunRepository(root).list_saved_runs()
+
+    assert [run.run_id for run in runs] == ["vrun-20260601-120000-abcdef12"]
+
+
 def test_validation_repository_creates_safe_run_paths(tmp_path) -> None:
     repository = ValidationRunRepository(tmp_path / "validation-runs")
 
