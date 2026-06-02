@@ -82,6 +82,9 @@ REALTIME_VALIDATION_REPORTS_PAGE_PATH = (
     Path(__file__).parent / "static" / "realtime-validation-reports.html"
 )
 REALTIME_OPENAI_ADAPTER_PATH = Path(__file__).parent / "static" / "realtime-openai-adapter.js"
+REALTIME_DASHSCOPE_ADAPTER_PATH = (
+    Path(__file__).parent / "static" / "realtime-dashscope-adapter.js"
+)
 DEFAULT_REALTIME_CLIENT_SECRET_RATE_LIMIT = 20
 
 
@@ -139,6 +142,10 @@ def create_app(
     @app.get("/static/realtime-openai-adapter.js")
     def realtime_openai_adapter() -> FileResponse:
         return FileResponse(REALTIME_OPENAI_ADAPTER_PATH, media_type="application/javascript")
+
+    @app.get("/static/realtime-dashscope-adapter.js")
+    def realtime_dashscope_adapter() -> FileResponse:
+        return FileResponse(REALTIME_DASHSCOPE_ADAPTER_PATH, media_type="application/javascript")
 
     @app.get("/v1/realtime/validation-scenarios")
     def list_realtime_validation_scenarios() -> list:
