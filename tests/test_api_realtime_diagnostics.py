@@ -44,6 +44,7 @@ def test_realtime_dev_diagnostics_endpoint_reports_dashscope_supported(
     monkeypatch,
 ) -> None:
     monkeypatch.setenv("VOICEAGENTS_REALTIME_PROVIDER", "dashscope_realtime")
+    monkeypatch.setenv("VOICEAGENTS_DASHSCOPE_API_KEY", "dashscope-secret-should-not-render")
     client = TestClient(create_app())
 
     response = client.get("/v1/realtime/dev-diagnostics", headers=LOCAL_ORIGIN)
@@ -54,7 +55,11 @@ def test_realtime_dev_diagnostics_endpoint_reports_dashscope_supported(
     assert next(check for check in body["checks"] if check["name"] == "provider_supported")[
         "status"
     ] == "pass"
+    assert next(check for check in body["checks"] if check["name"] == "dashscope_api_key")[
+        "status"
+    ] == "pass"
     assert "openai_model" not in {check["name"] for check in body["checks"]}
+    assert "dashscope-secret-should-not-render" not in response.text
 
 
 def test_realtime_dev_diagnostics_endpoint_reports_openai_gate_and_key_without_leak(

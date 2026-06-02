@@ -6,6 +6,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from voiceagents.realtime.contracts import RealtimeProviderName, TranscriptLoggingMode
 from voiceagents.realtime.providers import (
+    DEFAULT_DASHSCOPE_BASE_URL,
+    DEFAULT_DASHSCOPE_REALTIME_MODEL,
     DEFAULT_OPENAI_REALTIME_MODEL,
     DEFAULT_OPENAI_REALTIME_VOICE,
     get_realtime_provider_capabilities,
@@ -50,13 +52,24 @@ def build_realtime_dev_diagnostics(
                 _check_openai_voice(source),
             ]
         )
+    elif provider == RealtimeProviderName.DASHSCOPE_REALTIME.value:
+        checks.extend(
+            [
+                _check_provider_model(
+                    provider,
+                    source.get("VOICEAGENTS_DASHSCOPE_REALTIME_MODEL")
+                    or DEFAULT_DASHSCOPE_REALTIME_MODEL,
+                ),
+                _check_dashscope_api_key(source),
+                _check_dashscope_model(source),
+                _check_dashscope_base_url(source),
+                _check_dashscope_connection_mode(),
+            ]
+        )
     elif provider in {provider_name.value for provider_name in capabilities}:
         capability = capabilities[RealtimeProviderName(provider)]
         checks.append(
-            _pass_check(
-                "provider_model",
-                f"Realtime provider model is configured as {capability.default_model}.",
-            )
+            _check_provider_model(provider, capability.default_model)
         )
     else:
         pass
@@ -129,6 +142,48 @@ def _check_openai_model(env: Mapping[str, str]) -> RealtimeDiagnosticsCheck:
 def _check_openai_voice(env: Mapping[str, str]) -> RealtimeDiagnosticsCheck:
     voice = env.get("VOICEAGENTS_OPENAI_REALTIME_VOICE") or DEFAULT_OPENAI_REALTIME_VOICE
     return _pass_check("openai_voice", f"OpenAI realtime voice is configured as {voice}.")
+
+
+def _check_provider_model(provider: str, model: str) -> RealtimeDiagnosticsCheck:
+    return _pass_check(
+        "provider_model",
+        f"Realtime provider '{provider}' model is configured as {model}.",
+    )
+
+
+def _check_dashscope_api_key(env: Mapping[str, str]) -> RealtimeDiagnosticsCheck:
+    if env.get("VOICEAGENTS_DASHSCOPE_API_KEY"):
+        return _pass_check(
+            "dashscope_api_key",
+            "DASHSCOPE_API_KEY is configured on the server.",
+        )
+    return RealtimeDiagnosticsCheck(
+        name="dashscope_api_key",
+        status="fail",
+        summary="DASHSCOPE_API_KEY is missing.",
+        detail="DashScope Realtime cannot connect to the provider without a server-side API key.",
+        remediation=(
+            "Set VOICEAGENTS_DASHSCOPE_API_KEY in the local server environment; "
+            "never expose it to the browser."
+        ),
+    )
+
+
+def _check_dashscope_model(env: Mapping[str, str]) -> RealtimeDiagnosticsCheck:
+    model = env.get("VOICEAGENTS_DASHSCOPE_REALTIME_MODEL") or DEFAULT_DASHSCOPE_REALTIME_MODEL
+    return _pass_check("dashscope_model", f"DashScope realtime model is configured as {model}.")
+
+
+def _check_dashscope_base_url(env: Mapping[str, str]) -> RealtimeDiagnosticsCheck:
+    base_url = env.get("VOICEAGENTS_DASHSCOPE_BASE_URL") or DEFAULT_DASHSCOPE_BASE_URL
+    return _pass_check("dashscope_base_url", f"DashScope base URL is configured as {base_url}.")
+
+
+def _check_dashscope_connection_mode() -> RealtimeDiagnosticsCheck:
+    return _pass_check(
+        "dashscope_connection_mode",
+        "DashScope realtime connection mode is server_websocket_proxy.",
+    )
 
 
 def _check_transcript_logging(env: Mapping[str, str]) -> RealtimeDiagnosticsCheck:
