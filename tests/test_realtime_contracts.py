@@ -43,6 +43,7 @@ def test_response_modes_match_spec() -> None:
 def test_realtime_provider_names_match_spec() -> None:
     assert RealtimeProviderName.MOCK == "mock"
     assert RealtimeProviderName.OPENAI_REALTIME == "openai_realtime"
+    assert RealtimeProviderName.DASHSCOPE_REALTIME == "dashscope_realtime"
 
 
 def test_normalized_realtime_event_types_match_spec() -> None:

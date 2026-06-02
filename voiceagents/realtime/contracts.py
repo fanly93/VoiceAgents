@@ -27,6 +27,7 @@ class ResponseMode(StrEnum):
 class RealtimeProviderName(StrEnum):
     MOCK = "mock"
     OPENAI_REALTIME = "openai_realtime"
+    DASHSCOPE_REALTIME = "dashscope_realtime"
 
 
 class NormalizedRealtimeEventType(StrEnum):
