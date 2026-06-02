@@ -51,8 +51,10 @@ from voiceagents.realtime.tool_router import (
 )
 from voiceagents.realtime.validation import (
     STANDARD_VALIDATION_SCENARIOS,
+    ValidationRunListItem,
     ValidationRunFinishRequest,
     ValidationRunFinishResponse,
+    ValidationRunReport,
     ValidationRunRepository,
     ValidationRunStartRequest,
     ValidationRunStartResponse,
@@ -60,6 +62,9 @@ from voiceagents.realtime.validation import (
 
 
 REALTIME_TEST_PAGE_PATH = Path(__file__).parent / "static" / "realtime-test.html"
+REALTIME_VALIDATION_REPORTS_PAGE_PATH = (
+    Path(__file__).parent / "static" / "realtime-validation-reports.html"
+)
 REALTIME_OPENAI_ADAPTER_PATH = Path(__file__).parent / "static" / "realtime-openai-adapter.js"
 DEFAULT_REALTIME_CLIENT_SECRET_RATE_LIMIT = 20
 
@@ -107,6 +112,10 @@ def create_app(
     def realtime_test_page() -> FileResponse:
         return FileResponse(REALTIME_TEST_PAGE_PATH, media_type="text/html")
 
+    @app.get("/realtime-validation-reports")
+    def realtime_validation_reports_page() -> FileResponse:
+        return FileResponse(REALTIME_VALIDATION_REPORTS_PAGE_PATH, media_type="text/html")
+
     @app.get("/static/realtime-openai-adapter.js")
     def realtime_openai_adapter() -> FileResponse:
         return FileResponse(REALTIME_OPENAI_ADAPTER_PATH, media_type="application/javascript")
@@ -133,6 +142,18 @@ def create_app(
             return validation_repository.finish_run(run_id, request)
         except ValueError as error:
             raise HTTPException(status_code=400, detail=str(error)) from error
+
+    @app.get("/v1/realtime/validation-report-runs")
+    def list_realtime_validation_report_runs() -> list[ValidationRunListItem]:
+        return validation_repository.list_saved_runs()
+
+    @app.get("/v1/realtime/validation-report-runs/{run_id}")
+    def get_realtime_validation_report_run(run_id: str) -> ValidationRunReport:
+        try:
+            return validation_repository.load_report(run_id)
+        except ValueError as error:
+            status_code = 404 if "not found" in str(error) else 400
+            raise HTTPException(status_code=status_code, detail=str(error)) from error
 
     @app.post("/v1/realtime/client-secret")
     def create_realtime_client_secret(

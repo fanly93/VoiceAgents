@@ -1,4 +1,5 @@
 import json
+import os
 import re
 
 import pytest
@@ -12,6 +13,8 @@ from voiceagents.realtime.validation import (
     ValidationRunRepository,
     ValidationRunStartRequest,
     ValidationRunSummary,
+    build_validation_run_report,
+    derive_validation_report_readiness,
     evaluate_validation_checks,
 )
 
@@ -47,6 +50,51 @@ def make_finish_request(**updates: object) -> ValidationRunFinishRequest:
     }
     payload.update(updates)
     return ValidationRunFinishRequest.model_validate(payload)
+
+
+def make_summary(**updates: object) -> ValidationRunSummary:
+    payload = {
+        "run_id": "vrun-20260601-120000-abcdef12",
+        "scenario_id": "order_status",
+        "status": "pass",
+        "started_at": "2026-06-01T12:00:00+00:00",
+        "finished_at": "2026-06-01T12:01:00+00:00",
+        "summary_path": ".voiceagents/validation-runs/vrun-20260601-120000-abcdef12/summary.json",
+        "report_path": ".voiceagents/validation-runs/vrun-20260601-120000-abcdef12/report.md",
+        "checks": evaluate_validation_checks(STANDARD_VALIDATION_SCENARIOS[0], make_finish_request()),
+        "manual_assertions": {
+            "heard_voice": True,
+            "voice_quality_acceptable": True,
+            "business_answer_acceptable": True,
+            "demo_ready": True,
+            "notes": "clear enough",
+        },
+        "transcript_text": "Where is [ORDER_REDACTED]?",
+        "assistant_response_text": "The order is paid.",
+        "tool_names": ["lookup_order"],
+        "handoff_reason": None,
+        "provider_events": ["data_channel=open"],
+        "latency_ms_values": [120],
+    }
+    payload.update(updates)
+    return ValidationRunSummary.model_validate(payload)
+
+
+def with_check(
+    summary: ValidationRunSummary,
+    check_name: str,
+    *,
+    passed: bool,
+    detail: str,
+) -> ValidationRunSummary:
+    checks = [
+        check.model_copy(update={"passed": passed, "detail": detail})
+        if check.name == check_name
+        else check
+        for check in summary.checks
+    ]
+    status = "pass" if all(check.passed for check in checks) else "fail"
+    return summary.model_copy(update={"checks": checks, "status": status})
 
 
 def test_standard_validation_scenarios_are_fixed_and_realistic() -> None:
@@ -126,6 +174,333 @@ def test_summary_model_serializes_required_checks() -> None:
     assert "blocked_secret_scan_passed" in check_names
 
 
+def test_readiness_is_ready_for_pilot_when_summary_passes() -> None:
+    summary = make_summary()
+
+    readiness = derive_validation_report_readiness(summary)
+
+    assert readiness == "ready_for_pilot"
+
+
+def test_readiness_needs_another_validation_for_non_critical_failure() -> None:
+    summary = with_check(
+        make_summary(),
+        "manual_business_confirmed",
+        passed=False,
+        detail="manual business/demo checks failed",
+    )
+
+    readiness = derive_validation_report_readiness(summary)
+
+    assert readiness == "needs_another_validation"
+
+
+def test_readiness_is_blocked_when_provider_errors_are_observed() -> None:
+    summary = with_check(
+        make_summary(),
+        "provider_errors_absent",
+        passed=False,
+        detail="provider error marker found",
+    )
+
+    readiness = derive_validation_report_readiness(summary)
+
+    assert readiness == "blocked"
+
+
+def test_readiness_is_blocked_when_blocked_secret_scan_fails() -> None:
+    summary = with_check(
+        make_summary(),
+        "blocked_secret_scan_passed",
+        passed=False,
+        detail="saved payload contains blocked tokens",
+    )
+
+    readiness = derive_validation_report_readiness(summary)
+
+    assert readiness == "blocked"
+
+
+def test_report_view_contains_decision_summary_for_boss_audience() -> None:
+    report = build_validation_run_report(make_summary())
+
+    assert report.run_id == "vrun-20260601-120000-abcdef12"
+    assert report.scenario.scenario_id == "order_status"
+    assert report.scenario.label == "Order status lookup"
+    assert report.readiness == "ready_for_pilot"
+    assert report.decision_summary.label == "可以继续推进试点"
+    assert report.decision_summary.next_action
+    assert "老板" in {section.audience for section in report.audience_sections}
+    assert any("业务回答" in bullet for bullet in report.business_proof)
+    assert any(check.name == "expected_tools_observed" for check in report.checks)
+    assert report.warnings == []
+
+
+def test_report_view_adds_warnings_for_failed_checks() -> None:
+    summary = with_check(
+        make_summary(),
+        "manual_business_confirmed",
+        passed=False,
+        detail="manual business/demo checks failed",
+    )
+
+    report = build_validation_run_report(summary)
+
+    assert report.readiness == "needs_another_validation"
+    assert report.warnings == [
+        "manual_business_confirmed: manual business/demo checks failed"
+    ]
+
+
+def test_report_view_copy_summary_is_chinese_first_and_forwardable() -> None:
+    report = build_validation_run_report(make_summary())
+
+    assert report.copy_summary.text.startswith("试点演示验证结果：")
+    assert "订单状态查询" in report.copy_summary.text
+    assert "可以继续推进试点" in report.copy_summary.text
+    assert "证据：" in report.copy_summary.text
+    assert "下一步：" in report.copy_summary.text
+
+
+def test_report_view_business_proof_includes_handoff_and_secret_scan() -> None:
+    request = make_finish_request(
+        tool_names=["query_product_knowledge", "handoff_to_human"],
+        handoff_reason="low_confidence",
+        assistant_response_text="I will transfer you to a human support agent.",
+    )
+    scenario = STANDARD_VALIDATION_SCENARIOS[3]
+    summary = make_summary(
+        scenario_id=scenario.scenario_id,
+        checks=evaluate_validation_checks(scenario, request),
+        tool_names=request.tool_names,
+        handoff_reason=request.handoff_reason,
+        manual_assertions=request.manual_assertions,
+    )
+
+    report = build_validation_run_report(summary)
+
+    assert "转人工：通过" in report.business_proof
+    assert "安全扫描：通过" in report.business_proof
+    assert "转人工：通过" in report.copy_summary.text
+    assert "安全扫描：通过" in report.copy_summary.text
+
+
+def test_report_view_business_proof_follows_manual_business_check_result() -> None:
+    summary = with_check(
+        make_summary(
+            manual_assertions={
+                "heard_voice": True,
+                "voice_quality_acceptable": True,
+                "business_answer_acceptable": False,
+                "demo_ready": True,
+                "notes": "demo looked ready but answer was wrong",
+            },
+        ),
+        "manual_business_confirmed",
+        passed=False,
+        detail="manual business/demo checks failed",
+    )
+
+    report = build_validation_run_report(summary)
+
+    assert "业务回答：未通过" in report.business_proof
+    assert "业务回答：通过" not in report.business_proof
+
+
+def test_report_view_does_not_expose_absolute_local_paths() -> None:
+    summary = make_summary(
+        summary_path="/Users/tanglin/VibeCoding/VoiceAgents/.voiceagents/validation-runs/vrun-20260601-120000-abcdef12/summary.json",
+        report_path="/Users/tanglin/VibeCoding/VoiceAgents/.voiceagents/validation-runs/vrun-20260601-120000-abcdef12/report.md",
+    )
+
+    report_payload = build_validation_run_report(summary).model_dump(mode="json")
+
+    assert "/Users/" not in json.dumps(report_payload, ensure_ascii=False)
+    assert "summary_path" not in report_payload
+    assert "report_path" not in report_payload
+
+
+def test_list_saved_runs_returns_empty_when_root_is_missing(tmp_path) -> None:
+    repository = ValidationRunRepository(tmp_path / "missing-validation-runs")
+
+    assert repository.list_saved_runs() == []
+
+
+def test_list_saved_runs_returns_newest_first_without_paths(tmp_path) -> None:
+    root = tmp_path / "validation-runs"
+    older = make_summary(
+        run_id="vrun-20260601-120000-abcdef12",
+        finished_at="2026-06-01T12:01:00+00:00",
+    )
+    newer = make_summary(
+        run_id="vrun-20260601-130000-bcdefa23",
+        finished_at="2026-06-01T13:01:00+00:00",
+    )
+    for summary in [older, newer]:
+        run_dir = root / summary.run_id
+        run_dir.mkdir(parents=True)
+        (run_dir / "summary.json").write_text(
+            json.dumps(summary.model_dump(mode="json")),
+            encoding="utf-8",
+        )
+    (root / "notes").mkdir()
+
+    runs = ValidationRunRepository(root).list_saved_runs()
+
+    assert [run.run_id for run in runs] == [
+        "vrun-20260601-130000-bcdefa23",
+        "vrun-20260601-120000-abcdef12",
+    ]
+    assert runs[0].scenario_label == "Order status lookup"
+    assert runs[0].readiness == "ready_for_pilot"
+    assert "path" not in runs[0].model_dump(mode="json")
+
+
+def test_list_saved_runs_skips_malformed_summaries(tmp_path) -> None:
+    root = tmp_path / "validation-runs"
+    valid = make_summary(run_id="vrun-20260601-120000-abcdef12")
+    valid_dir = root / valid.run_id
+    bad_dir = root / "vrun-20260601-130000-bcdefa23"
+    valid_dir.mkdir(parents=True)
+    bad_dir.mkdir(parents=True)
+    (valid_dir / "summary.json").write_text(
+        json.dumps(valid.model_dump(mode="json")),
+        encoding="utf-8",
+    )
+    (bad_dir / "summary.json").write_text("{not-json", encoding="utf-8")
+
+    runs = ValidationRunRepository(root).list_saved_runs()
+
+    assert [run.run_id for run in runs] == ["vrun-20260601-120000-abcdef12"]
+
+
+def test_list_saved_runs_skips_summaries_with_mismatched_run_id(tmp_path) -> None:
+    root = tmp_path / "validation-runs"
+    run_dir = root / "vrun-20260601-120000-abcdef12"
+    run_dir.mkdir(parents=True)
+    mismatched = make_summary(run_id="vrun-20260601-130000-bcdefa23")
+    (run_dir / "summary.json").write_text(
+        json.dumps(mismatched.model_dump(mode="json")),
+        encoding="utf-8",
+    )
+
+    runs = ValidationRunRepository(root).list_saved_runs()
+
+    assert runs == []
+
+
+def test_list_saved_runs_falls_back_to_run_id_when_finished_at_is_missing(tmp_path) -> None:
+    root = tmp_path / "validation-runs"
+    older = make_summary(run_id="vrun-20260601-120000-abcdef12")
+    newer = make_summary(run_id="vrun-20260601-130000-bcdefa23")
+    for summary in [older, newer]:
+        run_dir = root / summary.run_id
+        run_dir.mkdir(parents=True)
+        payload = summary.model_dump(mode="json")
+        payload.pop("finished_at")
+        (run_dir / "summary.json").write_text(
+            json.dumps(payload),
+            encoding="utf-8",
+        )
+
+    runs = ValidationRunRepository(root).list_saved_runs()
+
+    assert [run.run_id for run in runs] == [
+        "vrun-20260601-130000-bcdefa23",
+        "vrun-20260601-120000-abcdef12",
+    ]
+    assert runs[0].finished_at == "vrun-20260601-130000-bcdefa23"
+
+
+def test_load_report_returns_safe_report_for_run_id(tmp_path) -> None:
+    root = tmp_path / "validation-runs"
+    summary = make_summary(run_id="vrun-20260601-120000-abcdef12")
+    run_dir = root / summary.run_id
+    run_dir.mkdir(parents=True)
+    (run_dir / "summary.json").write_text(
+        json.dumps(summary.model_dump(mode="json")),
+        encoding="utf-8",
+    )
+
+    report = ValidationRunRepository(root).load_report(summary.run_id)
+
+    assert report.run_id == summary.run_id
+    assert report.readiness == "ready_for_pilot"
+    assert report.scenario.scenario_id == "order_status"
+
+
+def test_load_report_rejects_path_like_run_id(tmp_path) -> None:
+    repository = ValidationRunRepository(tmp_path / "validation-runs")
+
+    with pytest.raises(ValueError, match="Invalid validation run id"):
+        repository.load_report("../escape")
+
+
+def test_load_report_errors_when_summary_is_missing_or_malformed(tmp_path) -> None:
+    root = tmp_path / "validation-runs"
+    missing_summary_dir = root / "vrun-20260601-120000-abcdef12"
+    malformed_summary_dir = root / "vrun-20260601-130000-bcdefa23"
+    missing_summary_dir.mkdir(parents=True)
+    malformed_summary_dir.mkdir(parents=True)
+    (malformed_summary_dir / "summary.json").write_text("{not-json", encoding="utf-8")
+
+    repository = ValidationRunRepository(root)
+
+    with pytest.raises(ValueError, match="Validation summary not found"):
+        repository.load_report("vrun-20260601-120000-abcdef12")
+    with pytest.raises(ValueError, match="Validation summary is malformed"):
+        repository.load_report("vrun-20260601-130000-bcdefa23")
+
+
+def test_load_report_errors_when_summary_run_id_mismatches_directory(tmp_path) -> None:
+    root = tmp_path / "validation-runs"
+    run_dir = root / "vrun-20260601-120000-abcdef12"
+    run_dir.mkdir(parents=True)
+    mismatched = make_summary(run_id="vrun-20260601-130000-bcdefa23")
+    (run_dir / "summary.json").write_text(
+        json.dumps(mismatched.model_dump(mode="json")),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="Validation summary run id mismatch"):
+        ValidationRunRepository(root).load_report("vrun-20260601-120000-abcdef12")
+
+
+@pytest.mark.skipif(not hasattr(os, "symlink"), reason="symlinks are unavailable")
+def test_load_report_rejects_summary_symlink_that_escapes_root(tmp_path) -> None:
+    root = tmp_path / "validation-runs"
+    run_dir = root / "vrun-20260601-120000-abcdef12"
+    run_dir.mkdir(parents=True)
+    outside = tmp_path / "outside-summary.json"
+    outside.write_text(
+        json.dumps(make_summary().model_dump(mode="json")),
+        encoding="utf-8",
+    )
+    (run_dir / "summary.json").symlink_to(outside)
+
+    with pytest.raises(ValueError, match="Validation summary path escaped root"):
+        ValidationRunRepository(root).load_report("vrun-20260601-120000-abcdef12")
+
+
+def test_load_report_rejects_serialized_report_with_blocked_tokens(tmp_path) -> None:
+    root = tmp_path / "validation-runs"
+    summary = with_check(
+        make_summary(run_id="vrun-20260601-120000-abcdef12"),
+        "manual_business_confirmed",
+        passed=False,
+        detail="Authorization header leaked",
+    )
+    run_dir = root / summary.run_id
+    run_dir.mkdir(parents=True)
+    (run_dir / "summary.json").write_text(
+        json.dumps(summary.model_dump(mode="json")),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="blocked tokens"):
+        ValidationRunRepository(root).load_report(summary.run_id)
+
+
 def test_validation_repository_creates_safe_run_paths(tmp_path) -> None:
     repository = ValidationRunRepository(tmp_path / "validation-runs")
 
@@ -160,6 +535,43 @@ def test_validation_summary_is_redacted_before_write(tmp_path) -> None:
     assert "should-not-save" not in summary_text
     assert "SDP" not in summary_text
     assert finished.checks[-1].name == "blocked_secret_scan_passed"
+
+
+def test_validation_summary_redacts_secret_values_and_check_details_before_write(tmp_path) -> None:
+    repository = ValidationRunRepository(tmp_path / "validation-runs")
+    started = repository.start_run(make_start_request())
+
+    finished = repository.finish_run(
+        started.run_id,
+        make_finish_request(
+            session_state="ended Authorization Bearer live-token-123456789",
+            transcript_text="The key is sk-live-secret-1234567890.",
+            assistant_response_text="Token Bearer live-token-abcdefghi should not persist.",
+            tool_names=["lookup_order", "Authorization Bearer tool-token-123456789"],
+            provider_events=["client_secret=sk-live-secret-abcdefgh", "data_channel=open"],
+            manual_assertions={
+                "heard_voice": True,
+                "voice_quality_acceptable": True,
+                "business_answer_acceptable": True,
+                "demo_ready": True,
+                "notes": "Bearer live-note-token-123456789",
+            },
+        ),
+    )
+
+    summary_text = (tmp_path / "validation-runs" / started.run_id / "summary.json").read_text(
+        encoding="utf-8"
+    )
+    report_text = (tmp_path / "validation-runs" / started.run_id / "report.md").read_text(
+        encoding="utf-8"
+    )
+    response_text = json.dumps(finished.model_dump(mode="json"), ensure_ascii=False)
+
+    for persisted_text in [summary_text, report_text, response_text]:
+        assert "sk-live" not in persisted_text
+        assert "Bearer live" not in persisted_text
+        assert "Authorization" not in persisted_text
+        assert "tool-token-123456789" not in persisted_text
 
 
 def test_validation_summary_preserves_safe_audio_event_names(tmp_path) -> None:

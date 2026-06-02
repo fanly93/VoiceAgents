@@ -117,6 +117,13 @@ STANDARD_VALIDATION_SCENARIOS = [
 
 
 SCENARIOS_BY_ID = {scenario.scenario_id: scenario for scenario in STANDARD_VALIDATION_SCENARIOS}
+SCENARIO_CHINESE_LABELS = {
+    "order_status": "订单状态查询",
+    "logistics_tracking": "物流进度查询",
+    "product_knowledge": "产品知识咨询",
+    "knowledge_low_confidence_handoff": "知识低置信转人工",
+    "customer_requested_human": "客户主动要求人工",
+}
 
 
 class ValidationRunStartRequest(BaseModel):
@@ -200,6 +207,196 @@ class ValidationRunFinishResponse(BaseModel):
     summary_path: str = Field(min_length=1)
     report_path: str = Field(min_length=1)
     checks: list[ValidationCheck]
+
+
+ValidationReportReadiness = Literal["ready_for_pilot", "needs_another_validation", "blocked"]
+
+
+class ValidationRunScenarioSummary(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    scenario_id: str = Field(min_length=1)
+    label: str = Field(min_length=1)
+
+
+class ValidationRunDecisionSummary(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    label: str = Field(min_length=1)
+    summary: str = Field(min_length=1)
+    next_action: str = Field(min_length=1)
+
+
+class ValidationRunAudienceSection(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    audience: str = Field(min_length=1)
+    title: str = Field(min_length=1)
+    bullets: list[str]
+
+
+class ValidationRunCopySummary(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    text: str = Field(min_length=1)
+
+
+class ValidationRunReport(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    run_id: str = Field(min_length=1)
+    scenario: ValidationRunScenarioSummary
+    status: Literal["pass", "fail"]
+    readiness: ValidationReportReadiness
+    decision_summary: ValidationRunDecisionSummary
+    scenario_coverage: list[str]
+    business_proof: list[str]
+    audience_sections: list[ValidationRunAudienceSection]
+    copy_summary: ValidationRunCopySummary
+    checks: list[ValidationCheck]
+    warnings: list[str]
+
+
+class ValidationRunListItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    run_id: str = Field(min_length=1)
+    scenario_id: str = Field(min_length=1)
+    scenario_label: str = Field(min_length=1)
+    status: Literal["pass", "fail"]
+    readiness: ValidationReportReadiness
+    started_at: str = Field(min_length=1)
+    finished_at: str = Field(min_length=1)
+
+
+def derive_validation_report_readiness(
+    summary: ValidationRunSummary,
+) -> ValidationReportReadiness:
+    failed_critical_checks = {
+        check.name
+        for check in summary.checks
+        if not check.passed
+        and check.name in {"provider_errors_absent", "blocked_secret_scan_passed"}
+    }
+    if failed_critical_checks:
+        return "blocked"
+    if summary.status == "pass" and all(check.passed for check in summary.checks):
+        return "ready_for_pilot"
+    return "needs_another_validation"
+
+
+def build_validation_run_report(summary: ValidationRunSummary) -> ValidationRunReport:
+    readiness = derive_validation_report_readiness(summary)
+    scenario = SCENARIOS_BY_ID.get(summary.scenario_id)
+    scenario_label = scenario.label if scenario is not None else summary.scenario_id
+    scenario_label_cn = SCENARIO_CHINESE_LABELS.get(summary.scenario_id, scenario_label)
+    failed_checks = [check for check in summary.checks if not check.passed]
+    warnings = [f"{check.name}: {check.detail}" for check in failed_checks]
+    readiness_label = _readiness_label(readiness)
+    next_action = _readiness_next_action(readiness)
+    evidence = _report_evidence(summary)
+    report = ValidationRunReport(
+        run_id=summary.run_id,
+        scenario=ValidationRunScenarioSummary(
+            scenario_id=summary.scenario_id,
+            label=scenario_label,
+        ),
+        status=summary.status,
+        readiness=readiness,
+        decision_summary=ValidationRunDecisionSummary(
+            label=readiness_label,
+            summary=f"{scenario_label_cn}场景验证结果为：{readiness_label}。",
+            next_action=next_action,
+        ),
+        scenario_coverage=[
+            f"验证场景：{scenario_label_cn}",
+            f"预期工具：{', '.join(scenario.expected_tools) if scenario is not None else '未配置'}",
+            "转人工预期：需要" if scenario is not None and scenario.expected_handoff else "转人工预期：不需要",
+        ],
+        business_proof=evidence,
+        audience_sections=[
+            ValidationRunAudienceSection(
+                audience="老板",
+                title="决策人摘要",
+                bullets=[
+                    f"结论：{readiness_label}",
+                    f"验证对象：{scenario_label_cn}",
+                    f"建议动作：{next_action}",
+                ],
+            ),
+            ValidationRunAudienceSection(
+                audience="客服主管",
+                title="客服主管关注点",
+                bullets=[
+                    "语音可听清" if summary.manual_assertions.heard_voice else "语音未确认",
+                    "业务回答可接受"
+                    if summary.manual_assertions.business_answer_acceptable
+                    or summary.manual_assertions.demo_ready
+                    else "业务回答需复核",
+                    "无需人工介入"
+                    if not summary.handoff_reason or summary.handoff_reason == "none"
+                    else f"转人工原因：{summary.handoff_reason}",
+                ],
+            ),
+            ValidationRunAudienceSection(
+                audience="技术同事",
+                title="技术复核点",
+                bullets=[
+                    f"状态：{summary.status}",
+                    f"检查项：{sum(1 for check in summary.checks if check.passed)}/{len(summary.checks)} 通过",
+                    f"延迟样本：{', '.join(str(value) + 'ms' for value in summary.latency_ms_values) or '无'}",
+                ],
+            ),
+        ],
+        copy_summary=ValidationRunCopySummary(
+            text=(
+                f"试点演示验证结果：{scenario_label_cn}，{readiness_label}。\n"
+                f"证据：{'; '.join(evidence)}。\n"
+                f"下一步：{next_action}"
+            ),
+        ),
+        checks=summary.checks,
+        warnings=warnings,
+    )
+    if not _blocked_secret_scan(report.model_dump(mode="json")):
+        raise ValueError("Validation report contains blocked tokens")
+    return report
+
+
+def _readiness_label(readiness: ValidationReportReadiness) -> str:
+    if readiness == "ready_for_pilot":
+        return "可以继续推进试点"
+    if readiness == "blocked":
+        return "阻塞，先修复问题"
+    return "需要再跑一次验证"
+
+
+def _readiness_next_action(readiness: ValidationReportReadiness) -> str:
+    if readiness == "ready_for_pilot":
+        return "可把本摘要转发给决策人，进入试点准备。"
+    if readiness == "blocked":
+        return "先修复阻塞问题，再重新验证。"
+    return "补齐失败检查项后，重新运行同一场景验证。"
+
+
+def _report_evidence(summary: ValidationRunSummary) -> list[str]:
+    check_lookup = {check.name: check.passed for check in summary.checks}
+    return [
+        "语音确认：通过" if summary.manual_assertions.heard_voice else "语音确认：未通过",
+        "业务回答：通过" if check_lookup.get("manual_business_confirmed", False) else "业务回答：未通过",
+        "工具调用：通过"
+        if check_lookup.get("expected_tools_observed", False)
+        else "工具调用：未通过",
+        "转人工：通过"
+        if check_lookup.get("expected_handoff_observed", False)
+        else "转人工：未通过",
+        "系统错误：未发现"
+        if check_lookup.get("provider_errors_absent", False)
+        else "系统错误：已发现",
+        "安全扫描：通过"
+        if check_lookup.get("blocked_secret_scan_passed", False)
+        else "安全扫描：未通过",
+    ]
 
 
 def evaluate_validation_checks(
@@ -320,7 +517,7 @@ class ValidationRunRepository:
         summary_path = run_dir / "summary.json"
         report_path = run_dir / "report.md"
         redacted_payload = _redact_finish_request(request)
-        checks = evaluate_validation_checks(scenario, request)
+        checks = _scrub_validation_checks(evaluate_validation_checks(scenario, request))
         finished_at = datetime.now(timezone.utc).isoformat()
 
         preliminary_summary = ValidationRunSummary(
@@ -369,6 +566,56 @@ class ValidationRunRepository:
             checks=checks,
         )
 
+    def list_saved_runs(self) -> list[ValidationRunListItem]:
+        if not self._root.exists():
+            return []
+
+        runs: list[ValidationRunListItem] = []
+        for candidate_dir in self._root.iterdir():
+            if not candidate_dir.is_dir() or not RUN_ID_RE.fullmatch(candidate_dir.name):
+                continue
+            try:
+                run_dir = self._run_dir(candidate_dir.name)
+                summary_path = self._summary_path(candidate_dir.name)
+            except ValueError:
+                continue
+            try:
+                summary_payload = json.loads(summary_path.read_text(encoding="utf-8"))
+                if not summary_payload.get("finished_at"):
+                    summary_payload["finished_at"] = run_dir.name
+                summary = ValidationRunSummary.model_validate(summary_payload)
+            except Exception:
+                continue
+            if summary.run_id != run_dir.name or not RUN_ID_RE.fullmatch(summary.run_id):
+                continue
+            scenario = SCENARIOS_BY_ID.get(summary.scenario_id)
+            runs.append(
+                ValidationRunListItem(
+                    run_id=summary.run_id,
+                    scenario_id=summary.scenario_id,
+                    scenario_label=scenario.label if scenario is not None else summary.scenario_id,
+                    status=summary.status,
+                    readiness=derive_validation_report_readiness(summary),
+                    started_at=summary.started_at,
+                    finished_at=summary.finished_at,
+                )
+            )
+        return sorted(runs, key=lambda run: (run.finished_at, run.run_id), reverse=True)
+
+    def load_report(self, run_id: str) -> ValidationRunReport:
+        summary_path = self._summary_path(run_id)
+        if not summary_path.is_file():
+            raise ValueError("Validation summary not found")
+        try:
+            summary = ValidationRunSummary.model_validate_json(
+                summary_path.read_text(encoding="utf-8")
+            )
+        except Exception as error:
+            raise ValueError("Validation summary is malformed") from error
+        if summary.run_id != run_id or not RUN_ID_RE.fullmatch(summary.run_id):
+            raise ValueError("Validation summary run id mismatch")
+        return build_validation_run_report(summary)
+
     def _run_dir(self, run_id: str) -> Path:
         if not RUN_ID_RE.fullmatch(run_id):
             raise ValueError("Invalid validation run id")
@@ -377,6 +624,14 @@ class ValidationRunRepository:
         if root != run_dir and root not in run_dir.parents:
             raise ValueError("Validation run path escaped root")
         return run_dir
+
+    def _summary_path(self, run_id: str) -> Path:
+        root = self._root.resolve()
+        summary_path = self._run_dir(run_id) / "summary.json"
+        resolved_summary_path = summary_path.resolve()
+        if root != resolved_summary_path and root not in resolved_summary_path.parents:
+            raise ValueError("Validation summary path escaped root")
+        return summary_path
 
 
 def _new_run_id() -> str:
@@ -411,6 +666,15 @@ def _scrub_blocked_tokens(value):
     if isinstance(value, dict):
         return {key: _scrub_blocked_tokens(nested) for key, nested in value.items()}
     return value
+
+
+def _scrub_validation_checks(checks: list[ValidationCheck]) -> list[ValidationCheck]:
+    scrubbed_checks: list[ValidationCheck] = []
+    for check in checks:
+        redacted_detail = redact_text(check.detail).value
+        scrubbed_detail = _scrub_blocked_tokens(redacted_detail)
+        scrubbed_checks.append(check.model_copy(update={"detail": scrubbed_detail}))
+    return scrubbed_checks
 
 
 def _blocked_secret_scan(payload: dict[str, object]) -> bool:

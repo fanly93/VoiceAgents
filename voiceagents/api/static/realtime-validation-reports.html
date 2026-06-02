@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>VoiceAgents 验证报告</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --border: #d7dce2;
+        --muted: #5f6b7a;
+        --text: #1c2430;
+        --bg: #f7f9fb;
+        --panel: #ffffff;
+        --ok: #146c43;
+        --warn: #9a6700;
+        --bad: #b42318;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      header,
+      main {
+        width: min(1180px, calc(100% - 32px));
+        margin: 0 auto;
+      }
+
+      header {
+        padding: 24px 0 16px;
+      }
+
+      h1,
+      h2,
+      h3 {
+        margin: 0 0 10px;
+        line-height: 1.25;
+      }
+
+      p {
+        margin: 0 0 10px;
+      }
+
+      .layout {
+        display: grid;
+        grid-template-columns: 300px minmax(0, 1fr);
+        gap: 16px;
+        align-items: start;
+        padding-bottom: 32px;
+      }
+
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 16px;
+      }
+
+      .muted {
+        color: var(--muted);
+      }
+
+      .run-list {
+        display: grid;
+        gap: 8px;
+      }
+
+      .run-item {
+        width: 100%;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: #fff;
+        padding: 10px;
+        text-align: left;
+        cursor: pointer;
+      }
+
+      .run-item[aria-selected="true"] {
+        border-color: #335c99;
+        outline: 2px solid #d8e6ff;
+      }
+
+      .banner {
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        padding: 14px;
+        margin-bottom: 16px;
+      }
+
+      .banner.ready_for_pilot {
+        border-color: #9bd4b5;
+        color: var(--ok);
+      }
+
+      .banner.needs_another_validation {
+        border-color: #f1c36d;
+        color: var(--warn);
+      }
+
+      .banner.blocked {
+        border-color: #f4a39d;
+        color: var(--bad);
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      ul {
+        margin: 0;
+        padding-left: 18px;
+      }
+
+      textarea {
+        width: 100%;
+        min-height: 128px;
+        resize: vertical;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 10px;
+        font: inherit;
+      }
+
+      button {
+        font: inherit;
+      }
+
+      .primary {
+        margin-top: 8px;
+        border: 0;
+        border-radius: 6px;
+        background: #1f4f8f;
+        color: #fff;
+        padding: 8px 12px;
+      }
+
+      .hidden {
+        display: none;
+      }
+
+      @media (max-width: 800px) {
+        .layout,
+        .grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>VoiceAgents 验证报告</h1>
+      <p class="muted">本地试点演示报告，用于快速截图和转发摘要。</p>
+    </header>
+    <main class="layout">
+      <aside class="panel" aria-label="验证记录">
+        <h2>最近验证</h2>
+        <div id="run-list" class="run-list"></div>
+        <p id="empty-state" class="muted hidden">还没有可展示的验证报告。</p>
+        <p id="error-state" class="muted hidden">报告加载失败，请稍后重试。</p>
+      </aside>
+      <section class="panel" aria-label="报告详情">
+        <div id="readiness-banner" class="banner">请选择一条验证记录。</div>
+        <div class="grid">
+          <section>
+            <h2>场景覆盖</h2>
+            <ul id="scenario-coverage"></ul>
+          </section>
+          <section>
+            <h2>业务证据</h2>
+            <ul id="business-proof"></ul>
+          </section>
+        </div>
+        <section>
+          <h2>分角色摘要</h2>
+          <div id="audience-sections"></div>
+        </section>
+        <section>
+          <h2>风险提示</h2>
+          <ul id="warnings"></ul>
+        </section>
+        <section>
+          <h2>微信 / 飞书摘要</h2>
+          <textarea id="copy-summary" readonly></textarea>
+          <button id="copy-summary-button" class="primary" type="button">复制摘要</button>
+        </section>
+      </section>
+    </main>
+    <script>
+      const state = {
+        runs: [],
+        selectedRunId: null,
+        report: null,
+        error: null,
+      };
+      let autoLoadPromise = Promise.resolve([]);
+
+      const elements = {
+        runList: document.getElementById("run-list"),
+        emptyState: document.getElementById("empty-state"),
+        errorState: document.getElementById("error-state"),
+        readinessBanner: document.getElementById("readiness-banner"),
+        scenarioCoverage: document.getElementById("scenario-coverage"),
+        businessProof: document.getElementById("business-proof"),
+        audienceSections: document.getElementById("audience-sections"),
+        warnings: document.getElementById("warnings"),
+        copySummary: document.getElementById("copy-summary"),
+        copySummaryButton: document.getElementById("copy-summary-button"),
+      };
+
+      function setHidden(element, hidden) {
+        element.classList.toggle("hidden", hidden);
+      }
+
+      async function loadRuns() {
+        try {
+          const response = await fetch("/v1/realtime/validation-report-runs");
+          if (!response.ok) {
+            throw new Error(`Failed to load runs: ${response.status}`);
+          }
+          state.runs = await response.json();
+          state.error = null;
+          renderRunList();
+          if (state.runs.length > 0) {
+            await loadReport(state.runs[0].run_id);
+          }
+          return state.runs;
+        } catch (error) {
+          state.runs = [];
+          state.error = error;
+          elements.runList.replaceChildren();
+          setHidden(elements.emptyState, true);
+          setHidden(elements.errorState, false);
+          return [];
+        }
+      }
+
+      function renderRunList() {
+        elements.runList.replaceChildren();
+        for (const run of state.runs) {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "run-item";
+          button.textContent = `${run.scenario_label} · ${run.readiness}`;
+          button.setAttribute("data-run-id", run.run_id);
+          button.setAttribute("aria-selected", run.run_id === state.selectedRunId ? "true" : "false");
+          button.addEventListener("click", () => {
+            loadReport(run.run_id);
+          });
+          elements.runList.appendChild(button);
+        }
+        setHidden(elements.emptyState, state.runs.length !== 0);
+        setHidden(elements.errorState, true);
+      }
+
+      async function loadReport(runId) {
+        try {
+          const response = await fetch(`/v1/realtime/validation-report-runs/${runId}`);
+          if (!response.ok) {
+            throw new Error(`Failed to load report: ${response.status}`);
+          }
+          state.selectedRunId = runId;
+          state.report = await response.json();
+          state.error = null;
+          renderRunList();
+          renderReport(state.report);
+          setHidden(elements.errorState, true);
+          return state.report;
+        } catch (error) {
+          state.selectedRunId = runId;
+          state.report = null;
+          state.error = error;
+          renderRunList();
+          renderReportError("报告加载失败，请重新选择或重新验证。");
+          setHidden(elements.emptyState, true);
+          setHidden(elements.errorState, false);
+          return null;
+        }
+      }
+
+      function renderReport(report) {
+        elements.readinessBanner.className = `banner ${report.readiness}`;
+        elements.readinessBanner.textContent = `${report.decision_summary.label} · ${report.scenario.label}`;
+        renderList(elements.scenarioCoverage, report.scenario_coverage);
+        renderList(elements.businessProof, report.business_proof);
+        renderAudienceSections(report.audience_sections);
+        renderList(elements.warnings, report.warnings.length ? report.warnings : ["暂无失败检查项。"]);
+        elements.copySummary.value = report.copy_summary.text;
+      }
+
+      function renderReportError(message) {
+        elements.readinessBanner.className = "banner blocked";
+        elements.readinessBanner.textContent = message;
+        elements.scenarioCoverage.replaceChildren();
+        elements.businessProof.replaceChildren();
+        elements.audienceSections.replaceChildren();
+        elements.warnings.replaceChildren();
+        elements.copySummary.value = "";
+      }
+
+      function renderList(target, items) {
+        target.replaceChildren(
+          ...items.map((item) => {
+            const row = document.createElement("li");
+            row.textContent = item;
+            return row;
+          })
+        );
+      }
+
+      function renderAudienceSections(sections) {
+        elements.audienceSections.replaceChildren(
+          ...sections.map((section) => {
+            const article = document.createElement("article");
+            const heading = document.createElement("h3");
+            const list = document.createElement("ul");
+            heading.textContent = `${section.audience}：${section.title}`;
+            renderList(list, section.bullets);
+            article.appendChild(heading);
+            article.appendChild(list);
+            return article;
+          })
+        );
+      }
+
+      async function copySummary() {
+        const text = elements.copySummary.value;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(text);
+        } else {
+          elements.copySummary.focus();
+          elements.copySummary.select();
+        }
+        return text;
+      }
+
+      elements.copySummaryButton.addEventListener("click", () => {
+        copySummary();
+      });
+
+      window.voiceAgentsValidationReports = {
+        loadRuns,
+        loadReport,
+        renderRunList,
+        renderReport,
+        copySummary,
+        getAutoLoadPromise: () => autoLoadPromise,
+        getState: () => ({ ...state }),
+      };
+
+      if (!window.voiceAgentsValidationReportsDisableAutoLoad) {
+        autoLoadPromise = loadRuns();
+      }
+    </script>
+  </body>
+</html>

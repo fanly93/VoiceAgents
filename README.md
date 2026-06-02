@@ -16,6 +16,7 @@ Real pilot call recordings are not available yet, so real-call evaluation is def
 - Validate browser/local realtime voice session plumbing with mock-safe provider behavior.
 - Operate and validate the merged OpenAI Realtime browser voice MVP behind a local development gate.
 - Save local redacted realtime validation reports from `/realtime-test` for standard pilot scenarios.
+- Review saved local validation reports in the local-only viewer at `/realtime-validation-reports`.
 
 ## Out of Scope for the Current Phase
 
@@ -147,6 +148,19 @@ The `/realtime-test` page includes a local validation harness for five standard 
 
 Use `Start` to create or connect a realtime session, then use `Start Validation Run` before the scenario you want to capture. After the conversation finishes, set the manual assertions and click `Finish Run`.
 
+Use the local validation report viewer to review saved runs:
+
+```text
+http://127.0.0.1:8000/realtime-validation-reports
+```
+
+The viewer reads redacted summaries from `.voiceagents/validation-runs/<run_id>/summary.json` through:
+
+- `GET /v1/realtime/validation-report-runs`
+- `GET /v1/realtime/validation-report-runs/{run_id}`
+
+The v1 viewer is local-only. It does not provide public sharing, authentication, upload, export hosting, or a production report portal. Plan report prep for a pilot/demo review as a 1-3 minute local workflow after the validation run is finished.
+
 The API writes redacted local artifacts:
 
 ```text
@@ -154,7 +168,7 @@ The API writes redacted local artifacts:
 .voiceagents/validation-runs/<run_id>/report.md
 ```
 
-The `.voiceagents/` directory is gitignored and must not be committed. Saved validation artifacts must not contain raw audio, SDP, API keys, client secrets, tool tokens, Authorization headers, raw tool arguments, real PII, or unredacted transcripts.
+The `.voiceagents/validation-runs/` artifact boundary is local-only and remains gitignored. Saved validation artifacts must not be committed and must not contain raw audio, SDP, API keys, client secrets, tool tokens, Authorization headers, raw tool arguments, real PII, or unredacted transcripts.
 
 Focused validation harness tests:
 

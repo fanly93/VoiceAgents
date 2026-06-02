@@ -31,11 +31,22 @@ class BasicTextRedactor:
         r"\b(?:ORDER|ORD)[-_]?[A-Z0-9-]*\d[A-Z0-9-]*\b",
         re.IGNORECASE,
     )
+    _OPENAI_KEY_RE = re.compile(r"\bsk-[A-Za-z0-9][A-Za-z0-9_-]{7,}\b")
+    _BEARER_TOKEN_RE = re.compile(
+        r"\bBearer\s+[A-Za-z0-9._~+/=-]{8,}\b",
+        re.IGNORECASE,
+    )
+    _JWT_RE = re.compile(
+        r"\b[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b"
+    )
 
     def redact_text(self, text: str) -> RedactionResult[str]:
         redacted = self._EMAIL_RE.sub("[EMAIL_REDACTED]", text)
         redacted = self._PHONE_RE.sub("[PHONE_REDACTED]", redacted)
         redacted = self._ORDER_RE.sub("[ORDER_REDACTED]", redacted)
+        redacted = self._OPENAI_KEY_RE.sub("[SECRET_REDACTED]", redacted)
+        redacted = self._BEARER_TOKEN_RE.sub("[SECRET_REDACTED]", redacted)
+        redacted = self._JWT_RE.sub("[SECRET_REDACTED]", redacted)
         return RedactionResult(
             value=redacted,
             redaction_applied=redacted != text,
