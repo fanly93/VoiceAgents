@@ -3,12 +3,13 @@ import pytest
 
 from voiceagents.contracts.common import HandoffReason, ToolErrorCode
 from voiceagents.realtime.contracts import (
-    ResponseMode,
     NormalizedRealtimeEventType,
     RealtimeProviderName,
     RealtimeToolCallResponse,
     RealtimeToolStatus,
+    ResponseMode,
     VoiceSessionState,
+    build_default_realtime_session_config,
 )
 from voiceagents.realtime.dashscope import (
     DEFAULT_DASHSCOPE_REALTIME_MODEL,
@@ -97,6 +98,81 @@ def test_dashscope_adapter_rejects_missing_api_key_for_headers() -> None:
 
     with pytest.raises(DashScopeEventError, match="api key"):
         adapter.build_headers()
+
+
+def test_dashscope_adapter_builds_session_update_for_voice_mode() -> None:
+    adapter = DashScopeRealtimeAdapter(
+        DashScopeRealtimeConfig(
+            api_key="dashscope-secret",
+            model=DEFAULT_DASHSCOPE_REALTIME_MODEL,
+            voice="Chelsie",
+            base_url="https://dashscope.aliyuncs.com",
+        )
+    )
+
+    message = adapter.build_session_update_message(
+        build_default_realtime_session_config(),
+        response_mode=ResponseMode.VOICE,
+    )
+
+    session = message["session"]
+    assert message["type"] == "session.update"
+    assert session["modalities"] == ["audio", "text"]
+    assert session["voice"] == "Chelsie"
+    assert session["instructions"].startswith("You are a VoiceAgents support assistant")
+    assert session["input_audio_format"] == "pcm16"
+    assert session["output_audio_format"] == "pcm16"
+    assert session["turn_detection"] == {"type": "server_vad"}
+    assert "tool_choice" not in session
+    assert "parallel_tool_calls" not in session
+
+
+def test_dashscope_adapter_builds_session_update_for_text_mode() -> None:
+    adapter = DashScopeRealtimeAdapter(
+        DashScopeRealtimeConfig(
+            api_key="dashscope-secret",
+            model=DEFAULT_DASHSCOPE_REALTIME_MODEL,
+            voice=None,
+            base_url="https://dashscope.aliyuncs.com",
+        )
+    )
+
+    message = adapter.build_session_update_message(
+        build_default_realtime_session_config(),
+        response_mode=ResponseMode.TEXT,
+    )
+
+    session = message["session"]
+    assert session["modalities"] == ["text"]
+    assert "voice" not in session
+    assert session["output_audio_format"] is None
+
+
+def test_dashscope_adapter_maps_allowed_tools_to_function_declarations() -> None:
+    adapter = DashScopeRealtimeAdapter(
+        DashScopeRealtimeConfig(
+            api_key="dashscope-secret",
+            model=DEFAULT_DASHSCOPE_REALTIME_MODEL,
+            voice=None,
+            base_url="https://dashscope.aliyuncs.com",
+        )
+    )
+
+    message = adapter.build_session_update_message(
+        build_default_realtime_session_config(),
+        response_mode=ResponseMode.VOICE,
+    )
+    tools = message["session"]["tools"]
+
+    assert [tool["name"] for tool in tools] == [
+        "lookup_order",
+        "lookup_logistics",
+        "query_product_knowledge",
+        "handoff_to_human",
+    ]
+    assert all(tool["type"] == "function" for tool in tools)
+    assert tools[0]["description"] == "Look up safe order status fields for a confirmed order ID."
+    assert tools[0]["parameters"]["properties"]["order_id"]["type"] == "string"
 
 
 def test_dashscope_lifecycle_events_normalize_to_safe_events() -> None:
