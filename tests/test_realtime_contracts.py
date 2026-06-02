@@ -8,6 +8,8 @@ from voiceagents.realtime.contracts import (
     RealtimeConnectionMode,
     RealtimeEventIngestRequest,
     RealtimeEventIngestResponse,
+    RealtimeProviderCapability,
+    RealtimeProviderMode,
     RealtimeProviderName,
     RealtimeSessionConfig,
     RealtimeTranscriptEvent,
@@ -58,6 +60,63 @@ def test_realtime_connection_modes_match_spec() -> None:
         pass
     else:
         raise AssertionError("unknown realtime connection mode should fail")
+
+
+def test_realtime_provider_capability_rejects_extra_and_models_defaults() -> None:
+    capability = RealtimeProviderCapability(
+        provider=RealtimeProviderName.DASHSCOPE_REALTIME,
+        supported_provider_modes=[RealtimeProviderMode.NATIVE_REALTIME],
+        supported_connection_modes=[RealtimeConnectionMode.SERVER_WEBSOCKET_PROXY],
+        supported_response_modes=[ResponseMode.VOICE],
+        supports_native_tool_calls=True,
+        server_side_credentials_required=True,
+        default_model="qwen3.5-omni-flash-realtime",
+        default_voice=None,
+        diagnostics_checks=["dashscope_api_key", "dashscope_model"],
+    )
+
+    assert capability.provider is RealtimeProviderName.DASHSCOPE_REALTIME
+    assert capability.supported_provider_modes == [RealtimeProviderMode.NATIVE_REALTIME]
+    assert capability.supported_connection_modes == [
+        RealtimeConnectionMode.SERVER_WEBSOCKET_PROXY
+    ]
+    assert capability.supported_response_modes == [ResponseMode.VOICE]
+    assert capability.supports_native_tool_calls is True
+    assert capability.server_side_credentials_required is True
+    assert capability.default_model == "qwen3.5-omni-flash-realtime"
+    assert capability.default_voice is None
+    assert capability.diagnostics_checks == ["dashscope_api_key", "dashscope_model"]
+
+    try:
+        RealtimeProviderCapability(
+            provider=RealtimeProviderName.DASHSCOPE_REALTIME,
+            supported_provider_modes=["native_realtime"],
+            supported_connection_modes=["server_websocket_proxy"],
+            supported_response_modes=["voice"],
+            supports_native_tool_calls=True,
+            server_side_credentials_required=True,
+            default_model="qwen3.5-omni-flash-realtime",
+            default_voice=None,
+            diagnostics_checks=[],
+            browser_api_key="should-not-exist",
+        )
+    except ValueError as error:
+        assert "browser_api_key" in str(error)
+    else:
+        raise AssertionError("provider capability must reject extra fields")
+
+
+def test_realtime_provider_modes_match_spec() -> None:
+    assert RealtimeProviderMode.NATIVE_REALTIME == "native_realtime"
+    assert RealtimeProviderMode.ASR == "asr"
+    assert RealtimeProviderMode.TTS == "tts"
+    assert RealtimeProviderMode.CASCADED == "cascaded"
+    try:
+        RealtimeProviderMode("browser_direct_key")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("unknown realtime provider mode should fail")
 
 
 def test_normalized_realtime_event_types_match_spec() -> None:

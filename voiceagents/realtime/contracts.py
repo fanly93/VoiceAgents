@@ -37,6 +37,13 @@ class RealtimeConnectionMode(StrEnum):
     CASCADED_PIPELINE = "cascaded_pipeline"
 
 
+class RealtimeProviderMode(StrEnum):
+    NATIVE_REALTIME = "native_realtime"
+    ASR = "asr"
+    TTS = "tts"
+    CASCADED = "cascaded"
+
+
 class NormalizedRealtimeEventType(StrEnum):
     SESSION_CONNECTING = "session.connecting"
     SESSION_CONNECTED = "session.connected"
@@ -99,6 +106,20 @@ class RealtimeToolDefinition(BaseModel):
 class RealtimeSessionConfig(BaseModel):
     instructions: str = Field(min_length=1)
     tools: list[RealtimeToolDefinition]
+
+
+class RealtimeProviderCapability(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    provider: RealtimeProviderName
+    supported_provider_modes: list[RealtimeProviderMode]
+    supported_connection_modes: list[RealtimeConnectionMode]
+    supported_response_modes: list[ResponseMode]
+    supports_native_tool_calls: bool
+    server_side_credentials_required: bool
+    default_model: str = Field(min_length=1)
+    default_voice: str | None
+    diagnostics_checks: list[str]
 
 
 class RealtimeClientSecretRequest(BaseModel):
