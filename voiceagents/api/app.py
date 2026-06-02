@@ -328,7 +328,17 @@ def create_app(
         authorization: str | None = Header(default=None),
     ) -> RealtimeToolCallResponse:
         tool_call_token = _extract_bearer_token(authorization)
-        provider_name = _current_realtime_provider_name()
+        try:
+            provider_name = session_store.get_session_provider(request.session_id)
+        except VoiceSessionNotFound as error:
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "error_code": "invalid_tool_call_token",
+                    "message": "Invalid realtime tool-call token or binding.",
+                    "tool_name": request.tool_name,
+                },
+            ) from error
         try:
             response = tool_router.execute(
                 request,
