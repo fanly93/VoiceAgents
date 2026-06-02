@@ -54,3 +54,32 @@ def test_dashscope_error_event_normalizes_without_raw_provider_payload() -> None
 def test_dashscope_unknown_event_type_fails_closed() -> None:
     with pytest.raises(DashScopeEventError, match="Unsupported DashScope event"):
         normalize({"type": "dashscope.unknown"})
+
+
+def test_dashscope_transcript_events_normalize_to_transcript_payloads() -> None:
+    user_delta = normalize(
+        {
+            "type": "dashscope.transcript.user.delta",
+            "text": "Where",
+            "raw_audio": "base64-raw-audio",
+        }
+    )
+    user_done = normalize({"type": "dashscope.transcript.user.done", "text": "Where is order 123?"})
+    assistant_delta = normalize(
+        {"type": "dashscope.transcript.assistant.delta", "text": "I can check that."}
+    )
+    assistant_done = normalize(
+        {"type": "dashscope.transcript.assistant.done", "text": "Order is paid."}
+    )
+
+    assert user_delta.event_type is NormalizedRealtimeEventType.TRANSCRIPT_USER_DELTA
+    assert user_delta.state is VoiceSessionState.TRANSCRIBING
+    assert user_delta.speaker == "user"
+    assert user_delta.text == "Where"
+    assert user_done.event_type is NormalizedRealtimeEventType.TRANSCRIPT_USER_DONE
+    assert user_done.speaker == "user"
+    assert assistant_delta.event_type is NormalizedRealtimeEventType.TRANSCRIPT_ASSISTANT_DELTA
+    assert assistant_delta.speaker == "assistant"
+    assert assistant_done.event_type is NormalizedRealtimeEventType.TRANSCRIPT_ASSISTANT_DONE
+    assert assistant_done.speaker == "assistant"
+    assert "base64-raw-audio" not in user_delta.model_dump_json()

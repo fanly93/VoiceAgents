@@ -16,6 +16,28 @@ from voiceagents.realtime.contracts import (
 DEFAULT_DASHSCOPE_REALTIME_MODEL = "qwen3.5-omni-flash-realtime"
 DEFAULT_DASHSCOPE_BASE_URL = "https://dashscope.aliyuncs.com"
 DASHSCOPE_PROXY_ROUTE_TEMPLATE = "/v1/realtime/dashscope/proxy/{session_id}"
+DASHSCOPE_TRANSCRIPT_EVENT_MAP = {
+    "dashscope.transcript.user.delta": (
+        NormalizedRealtimeEventType.TRANSCRIPT_USER_DELTA,
+        VoiceSessionState.TRANSCRIBING,
+        "user",
+    ),
+    "dashscope.transcript.user.done": (
+        NormalizedRealtimeEventType.TRANSCRIPT_USER_DONE,
+        VoiceSessionState.THINKING,
+        "user",
+    ),
+    "dashscope.transcript.assistant.delta": (
+        NormalizedRealtimeEventType.TRANSCRIPT_ASSISTANT_DELTA,
+        VoiceSessionState.SPEAKING,
+        "assistant",
+    ),
+    "dashscope.transcript.assistant.done": (
+        NormalizedRealtimeEventType.TRANSCRIPT_ASSISTANT_DONE,
+        VoiceSessionState.LISTENING,
+        "assistant",
+    ),
+}
 
 
 class RealtimeProviderError(RuntimeError):
@@ -140,6 +162,19 @@ def normalize_dashscope_event(
             provider_event_type=provider_event_type,
             provider_call_id=None,
         )
+    if provider_event_type in DASHSCOPE_TRANSCRIPT_EVENT_MAP:
+        event_type, state, speaker = DASHSCOPE_TRANSCRIPT_EVENT_MAP[provider_event_type]
+        return _build_event(
+            session_id=session_id,
+            call_id=call_id,
+            merchant_id=merchant_id,
+            event_type=event_type,
+            state=state,
+            provider_event_type=provider_event_type,
+            provider_call_id=None,
+            speaker=speaker,
+            text=_string_field(payload, "text"),
+        )
     raise DashScopeEventError(f"Unsupported DashScope event: {provider_event_type}")
 
 
@@ -152,6 +187,8 @@ def _build_event(
     state: VoiceSessionState,
     provider_event_type: str,
     provider_call_id: str | None,
+    speaker: str | None = None,
+    text: str | None = None,
 ) -> RealtimeEventIngestRequest:
     return RealtimeEventIngestRequest(
         session_id=session_id,
@@ -162,6 +199,8 @@ def _build_event(
         state=state,
         provider_event_type=provider_event_type,
         provider_call_id=provider_call_id,
+        speaker=speaker,
+        text=text,
     )
 
 
