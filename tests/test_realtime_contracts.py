@@ -5,6 +5,7 @@ from voiceagents.realtime.contracts import (
     NormalizedRealtimeEventType,
     RealtimeClientSecretRequest,
     RealtimeClientSecretResponse,
+    RealtimeConnectionMode,
     RealtimeEventIngestRequest,
     RealtimeEventIngestResponse,
     RealtimeProviderName,
@@ -44,6 +45,19 @@ def test_realtime_provider_names_match_spec() -> None:
     assert RealtimeProviderName.MOCK == "mock"
     assert RealtimeProviderName.OPENAI_REALTIME == "openai_realtime"
     assert RealtimeProviderName.DASHSCOPE_REALTIME == "dashscope_realtime"
+
+
+def test_realtime_connection_modes_match_spec() -> None:
+    assert RealtimeConnectionMode.BROWSER_WEBRTC_EPHEMERAL == "browser_webrtc_ephemeral"
+    assert RealtimeConnectionMode.SERVER_WEBSOCKET_PROXY == "server_websocket_proxy"
+    assert RealtimeConnectionMode.SERVER_SDK_PROXY == "server_sdk_proxy"
+    assert RealtimeConnectionMode.CASCADED_PIPELINE == "cascaded_pipeline"
+    try:
+        RealtimeConnectionMode("browser_api_key")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("unknown realtime connection mode should fail")
 
 
 def test_normalized_realtime_event_types_match_spec() -> None:

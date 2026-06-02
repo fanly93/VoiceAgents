@@ -30,6 +30,13 @@ class RealtimeProviderName(StrEnum):
     DASHSCOPE_REALTIME = "dashscope_realtime"
 
 
+class RealtimeConnectionMode(StrEnum):
+    BROWSER_WEBRTC_EPHEMERAL = "browser_webrtc_ephemeral"
+    SERVER_WEBSOCKET_PROXY = "server_websocket_proxy"
+    SERVER_SDK_PROXY = "server_sdk_proxy"
+    CASCADED_PIPELINE = "cascaded_pipeline"
+
+
 class NormalizedRealtimeEventType(StrEnum):
     SESSION_CONNECTING = "session.connecting"
     SESSION_CONNECTED = "session.connected"
