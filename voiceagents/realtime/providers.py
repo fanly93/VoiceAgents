@@ -8,6 +8,8 @@ from voiceagents.realtime.contracts import (
     RealtimeClientSecretRequest,
     RealtimeClientSecretResponse,
     RealtimeConnectionMode,
+    RealtimeProviderCapability,
+    RealtimeProviderMode,
     RealtimeProviderName,
     RealtimeSessionConfig,
     RealtimeToolDefinition,
@@ -22,10 +24,59 @@ DEFAULT_OPENAI_REALTIME_MODEL = "gpt-realtime-2"
 DEFAULT_OPENAI_REALTIME_VOICE = "marin"
 DEFAULT_OPENAI_INPUT_TRANSCRIPTION_MODEL = "gpt-4o-mini-transcribe"
 DEFAULT_OPENAI_CLIENT_SECRET_TTL_SECONDS = 600
+DEFAULT_DASHSCOPE_REALTIME_MODEL = "qwen3.5-omni-flash-realtime"
 
 
 class RealtimeProviderError(RuntimeError):
     pass
+
+
+def get_realtime_provider_capabilities() -> dict[RealtimeProviderName, RealtimeProviderCapability]:
+    return {
+        RealtimeProviderName.MOCK: RealtimeProviderCapability(
+            provider=RealtimeProviderName.MOCK,
+            supported_provider_modes=[RealtimeProviderMode.NATIVE_REALTIME],
+            supported_connection_modes=[RealtimeConnectionMode.SERVER_WEBSOCKET_PROXY],
+            supported_response_modes=[ResponseMode.TEXT, ResponseMode.VOICE],
+            supports_native_tool_calls=True,
+            server_side_credentials_required=False,
+            default_model="mock-realtime",
+            default_voice="mock-voice",
+            diagnostics_checks=["provider_supported"],
+        ),
+        RealtimeProviderName.OPENAI_REALTIME: RealtimeProviderCapability(
+            provider=RealtimeProviderName.OPENAI_REALTIME,
+            supported_provider_modes=[RealtimeProviderMode.NATIVE_REALTIME],
+            supported_connection_modes=[RealtimeConnectionMode.BROWSER_WEBRTC_EPHEMERAL],
+            supported_response_modes=[ResponseMode.TEXT, ResponseMode.VOICE],
+            supports_native_tool_calls=True,
+            server_side_credentials_required=True,
+            default_model=DEFAULT_OPENAI_REALTIME_MODEL,
+            default_voice=DEFAULT_OPENAI_REALTIME_VOICE,
+            diagnostics_checks=[
+                "openai_dev_gate",
+                "openai_api_key",
+                "openai_model",
+                "openai_voice",
+            ],
+        ),
+        RealtimeProviderName.DASHSCOPE_REALTIME: RealtimeProviderCapability(
+            provider=RealtimeProviderName.DASHSCOPE_REALTIME,
+            supported_provider_modes=[RealtimeProviderMode.NATIVE_REALTIME],
+            supported_connection_modes=[RealtimeConnectionMode.SERVER_WEBSOCKET_PROXY],
+            supported_response_modes=[ResponseMode.VOICE],
+            supports_native_tool_calls=True,
+            server_side_credentials_required=True,
+            default_model=DEFAULT_DASHSCOPE_REALTIME_MODEL,
+            default_voice=None,
+            diagnostics_checks=[
+                "dashscope_api_key",
+                "dashscope_model",
+                "dashscope_base_url",
+                "dashscope_connection_mode",
+            ],
+        ),
+    }
 
 
 class OpenAIJsonTransport(Protocol):

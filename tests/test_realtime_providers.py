@@ -2,7 +2,9 @@ import pytest
 
 from voiceagents.realtime.contracts import (
     ALLOWED_REALTIME_TOOL_NAMES,
+    RealtimeConnectionMode,
     RealtimeClientSecretRequest,
+    RealtimeProviderMode,
     RealtimeProviderName,
     ResponseMode,
     build_default_realtime_session_config,
@@ -11,6 +13,7 @@ from voiceagents.realtime.providers import (
     MockRealtimeProvider,
     OpenAIRealtimeProvider,
     RealtimeProviderError,
+    get_realtime_provider_capabilities,
     map_realtime_tools_to_openai_tools,
 )
 
@@ -44,6 +47,25 @@ def make_client_secret_request(response_mode: ResponseMode = ResponseMode.TEXT) 
         response_mode=response_mode,
         locale="en-US",
         safety_subject_id="subject_hash_123",
+    )
+
+
+def test_realtime_provider_capabilities_include_supported_providers() -> None:
+    capabilities = get_realtime_provider_capabilities()
+
+    assert set(capabilities) == {
+        RealtimeProviderName.MOCK,
+        RealtimeProviderName.OPENAI_REALTIME,
+        RealtimeProviderName.DASHSCOPE_REALTIME,
+    }
+    assert capabilities[RealtimeProviderName.OPENAI_REALTIME].supported_connection_modes == [
+        RealtimeConnectionMode.BROWSER_WEBRTC_EPHEMERAL
+    ]
+    assert capabilities[RealtimeProviderName.DASHSCOPE_REALTIME].supported_provider_modes == [
+        RealtimeProviderMode.NATIVE_REALTIME
+    ]
+    assert capabilities[RealtimeProviderName.DASHSCOPE_REALTIME].default_model == (
+        "qwen3.5-omni-flash-realtime"
     )
 
 
