@@ -1,10 +1,28 @@
 # VoiceAgents Pilot Demo Report Viewer Tasks
 
-Status: REVIEWED / READY FOR IMPLEMENTATION
+Status: IMPLEMENTED / VERIFIED
 Source spec: `docs/specs/voiceagents-pilot-demo-report-viewer.md`
 Source design: `docs/designs/voiceagents-pilot-demo-report-viewer.md`
 Consistency review: `docs/reviews/autoplan-pilot-demo-report-viewer-2026-06-02.md`
 Branch: `feat/pilot-demo-report-viewer`
+
+Implementation result:
+
+- Completed all Phase 1-5 tasks on `feat/pilot-demo-report-viewer`.
+- Added local viewer route `/realtime-validation-reports`.
+- Added read-only local report APIs:
+  - `GET /v1/realtime/validation-report-runs`
+  - `GET /v1/realtime/validation-report-runs/{run_id}`
+- Hardened report safety after merge-before review:
+  - redacts secret-like values and check details before summary/report/API output
+  - rejects mismatched summary `run_id`
+  - rejects summary symlinks that escape the validation root
+  - includes handoff and secret-scan evidence in business proof / copy summary
+  - auto-loads the viewer and renders detail-load failures visibly
+- Final verification on this branch:
+  - `./.venv/bin/python -m pytest` -> 216 passed, 1 existing StarletteDeprecationWarning
+  - `git diff --check` -> clean
+  - final read-only review subagent -> no findings
 
 This document is the project-level task tracker for the Pilot Demo Report Viewer. The implementation must remain local-only, restrained, easy to understand, and safe to forward.
 
