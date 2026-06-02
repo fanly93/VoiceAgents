@@ -335,11 +335,32 @@ def create_app(
                 provider=provider_name,
             )
         except UnknownRealtimeToolError as error:
-            raise HTTPException(status_code=400, detail=str(error)) from error
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error_code": "unknown_tool",
+                    "message": "Unknown realtime tool.",
+                    "tool_name": request.tool_name,
+                },
+            ) from error
         except InvalidToolArgumentsError as error:
-            raise HTTPException(status_code=422, detail=str(error)) from error
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "error_code": "invalid_arguments",
+                    "message": "Invalid realtime tool arguments.",
+                    "tool_name": request.tool_name,
+                },
+            ) from error
         except InvalidToolCallTokenError as error:
-            raise HTTPException(status_code=403, detail=str(error)) from error
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "error_code": "invalid_tool_call_token",
+                    "message": "Invalid realtime tool-call token or binding.",
+                    "tool_name": request.tool_name,
+                },
+            ) from error
 
         event_repository.append(
             VoiceEvent(
@@ -364,7 +385,7 @@ def create_app(
                 provider=provider_name,
                 provider_event_type=None,
                 provider_call_id=None,
-                tool_status="completed",
+                tool_status=response.tool_status.value,
                 redaction_applied=False,
             )
         )
