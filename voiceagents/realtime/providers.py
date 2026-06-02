@@ -4,6 +4,13 @@ import json
 from typing import Protocol
 from urllib import error, request as urllib_request
 
+from voiceagents.realtime.dashscope import (
+    DEFAULT_DASHSCOPE_BASE_URL,
+    DEFAULT_DASHSCOPE_REALTIME_MODEL,
+    DashScopeRealtimeConfig,
+    DashScopeRealtimeProvider,
+    RealtimeProviderError,
+)
 from voiceagents.realtime.contracts import (
     RealtimeClientSecretRequest,
     RealtimeClientSecretResponse,
@@ -24,12 +31,6 @@ DEFAULT_OPENAI_REALTIME_MODEL = "gpt-realtime-2"
 DEFAULT_OPENAI_REALTIME_VOICE = "marin"
 DEFAULT_OPENAI_INPUT_TRANSCRIPTION_MODEL = "gpt-4o-mini-transcribe"
 DEFAULT_OPENAI_CLIENT_SECRET_TTL_SECONDS = 600
-DEFAULT_DASHSCOPE_REALTIME_MODEL = "qwen3.5-omni-flash-realtime"
-DEFAULT_DASHSCOPE_BASE_URL = "https://dashscope.aliyuncs.com"
-
-
-class RealtimeProviderError(RuntimeError):
-    pass
 
 
 def get_realtime_provider_capabilities() -> dict[RealtimeProviderName, RealtimeProviderCapability]:
@@ -155,12 +156,7 @@ def build_realtime_provider(
             voice=source.get("VOICEAGENTS_OPENAI_REALTIME_VOICE", DEFAULT_OPENAI_REALTIME_VOICE),
         )
     if provider_name is RealtimeProviderName.DASHSCOPE_REALTIME:
-        return DashScopeRealtimeProvider(
-            api_key=source.get("VOICEAGENTS_DASHSCOPE_API_KEY"),
-            model=source.get("VOICEAGENTS_DASHSCOPE_REALTIME_MODEL", DEFAULT_DASHSCOPE_REALTIME_MODEL),
-            voice=source.get("VOICEAGENTS_DASHSCOPE_REALTIME_VOICE"),
-            base_url=source.get("VOICEAGENTS_DASHSCOPE_BASE_URL", DEFAULT_DASHSCOPE_BASE_URL),
-        )
+        return DashScopeRealtimeProvider(DashScopeRealtimeConfig.from_env(source))
     raise RealtimeProviderError(f"Unsupported realtime provider: {provider_name.value}")
 
 
@@ -184,31 +180,6 @@ class MockRealtimeProvider:
             voice="mock-voice" if request.response_mode == "voice" else None,
             session_config=build_default_realtime_session_config(),
         )
-
-
-class DashScopeRealtimeProvider:
-    def __init__(
-        self,
-        *,
-        api_key: str | None,
-        model: str | None = None,
-        voice: str | None = None,
-        base_url: str | None = None,
-    ) -> None:
-        self._api_key = api_key
-        self._model = model or DEFAULT_DASHSCOPE_REALTIME_MODEL
-        self._voice = voice
-        self._base_url = (base_url or DEFAULT_DASHSCOPE_BASE_URL).rstrip("/")
-
-    def create_client_secret(
-        self,
-        request: RealtimeClientSecretRequest,
-    ) -> RealtimeClientSecretResponse:
-        if not self._api_key:
-            raise RealtimeProviderError(
-                "DASHSCOPE_API_KEY is required for dashscope_realtime provider"
-            )
-        raise RealtimeProviderError("DashScope realtime proxy is not implemented yet")
 
 
 class OpenAIRealtimeProvider:

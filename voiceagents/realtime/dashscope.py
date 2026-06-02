@@ -1,9 +1,22 @@
 from collections.abc import Mapping
 from dataclasses import dataclass
 
+from voiceagents.realtime.contracts import (
+    RealtimeClientSecretRequest,
+    RealtimeClientSecretResponse,
+    RealtimeConnectionMode,
+    RealtimeProviderName,
+    build_default_realtime_session_config,
+)
+
 
 DEFAULT_DASHSCOPE_REALTIME_MODEL = "qwen3.5-omni-flash-realtime"
 DEFAULT_DASHSCOPE_BASE_URL = "https://dashscope.aliyuncs.com"
+DASHSCOPE_PROXY_ROUTE_TEMPLATE = "/v1/realtime/dashscope/proxy/{session_id}"
+
+
+class RealtimeProviderError(RuntimeError):
+    pass
 
 
 @dataclass(frozen=True)
@@ -50,3 +63,33 @@ def _optional_env_value(env: Mapping[str, str], name: str) -> str | None:
         return None
     stripped = value.strip()
     return stripped or None
+
+
+class DashScopeRealtimeProvider:
+    def __init__(self, config: DashScopeRealtimeConfig) -> None:
+        self._config = config
+
+    def create_client_secret(
+        self,
+        request: RealtimeClientSecretRequest,
+    ) -> RealtimeClientSecretResponse:
+        if not self._config.has_api_key:
+            raise RealtimeProviderError(
+                "DASHSCOPE_API_KEY is required for dashscope_realtime provider"
+            )
+
+        return RealtimeClientSecretResponse(
+            provider=RealtimeProviderName.DASHSCOPE_REALTIME,
+            session_id=request.session_id,
+            call_id=request.call_id,
+            client_secret=None,
+            tool_call_token="provider-credentials-only",
+            connection_url=DASHSCOPE_PROXY_ROUTE_TEMPLATE.format(session_id=request.session_id),
+            connection_mode=RealtimeConnectionMode.SERVER_WEBSOCKET_PROXY,
+            ephemeral_credential=None,
+            expires_at=None,
+            credential_expires_at=None,
+            model=self._config.model,
+            voice=self._config.voice,
+            session_config=build_default_realtime_session_config(),
+        )
