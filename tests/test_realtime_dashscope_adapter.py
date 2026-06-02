@@ -20,6 +20,7 @@ from voiceagents.realtime.dashscope import (
     normalize_dashscope_event,
     normalize_dashscope_tool_call,
 )
+from voiceagents.realtime.outbound import RealtimeOutboundEvent, RealtimeOutboundEventKind
 
 
 def normalize(payload: dict[str, object]):
@@ -173,6 +174,103 @@ def test_dashscope_adapter_maps_allowed_tools_to_function_declarations() -> None
     assert all(tool["type"] == "function" for tool in tools)
     assert tools[0]["description"] == "Look up safe order status fields for a confirmed order ID."
     assert tools[0]["parameters"]["properties"]["order_id"]["type"] == "string"
+
+
+def test_dashscope_official_session_and_response_events_normalize() -> None:
+    connected = normalize({"type": "session.created", "request_id": "provider-call-1"})
+    done = normalize({"type": "response.done", "response": {"status": "completed"}})
+
+    assert connected.event_type is NormalizedRealtimeEventType.SESSION_CONNECTED
+    assert connected.provider_event_type == "session.created"
+    assert connected.provider_call_id == "provider-call-1"
+    assert done.event_type is NormalizedRealtimeEventType.RESPONSE_DONE
+    assert done.state is VoiceSessionState.LISTENING
+
+
+def test_dashscope_official_transcript_events_normalize() -> None:
+    user_done = normalize(
+        {
+            "type": "conversation.item.input_audio_transcription.completed",
+            "transcript": "Where is order 123?",
+        }
+    )
+    assistant_delta = normalize(
+        {
+            "type": "response.output_audio_transcript.delta",
+            "delta": "I can check that.",
+        }
+    )
+    assistant_done = normalize(
+        {
+            "type": "response.output_audio_transcript.done",
+            "transcript": "Order is paid.",
+        }
+    )
+
+    assert user_done.event_type is NormalizedRealtimeEventType.TRANSCRIPT_USER_DONE
+    assert user_done.speaker == "user"
+    assert user_done.text == "Where is order 123?"
+    assert assistant_delta.event_type is NormalizedRealtimeEventType.TRANSCRIPT_ASSISTANT_DELTA
+    assert assistant_delta.speaker == "assistant"
+    assert assistant_delta.text == "I can check that."
+    assert assistant_done.event_type is NormalizedRealtimeEventType.TRANSCRIPT_ASSISTANT_DONE
+    assert assistant_done.speaker == "assistant"
+
+
+def test_dashscope_official_audio_delta_is_transport_only() -> None:
+    adapter = DashScopeRealtimeAdapter(
+        DashScopeRealtimeConfig(
+            api_key="dashscope-secret",
+            model=DEFAULT_DASHSCOPE_REALTIME_MODEL,
+            voice=None,
+            base_url="https://dashscope.aliyuncs.com",
+        )
+    )
+
+    event = adapter.normalize_provider_event(
+        {"type": "response.audio.delta", "delta": "cGNtMTY="},
+        session_id="session-123",
+        call_id="call-123",
+        merchant_id="merchant-123",
+    )
+
+    assert isinstance(event, RealtimeOutboundEvent)
+    assert event.kind is RealtimeOutboundEventKind.AUDIO
+    assert event.audio == b"pcm16"
+
+
+def test_dashscope_official_function_call_event_normalizes_to_tool_request() -> None:
+    request = normalize_dashscope_tool_call(
+        {
+            "type": "response.function_call_arguments.done",
+            "call_id": "provider-tool-call-1",
+            "name": "lookup_order",
+            "arguments": json.dumps({"order_id": "ORD-20260601-1842"}),
+        },
+        session_id="session-123",
+        call_id="call-123",
+        merchant_id="merchant-123",
+    )
+
+    assert request.tool_name == "lookup_order"
+    assert request.arguments == {"order_id": "ORD-20260601-1842"}
+
+
+def test_dashscope_official_error_event_normalizes_without_raw_payload() -> None:
+    event = normalize(
+        {
+            "type": "error",
+            "error": {
+                "message": "Authorization: Bearer dashscope-secret failed",
+                "code": "Unauthorized",
+            },
+        }
+    )
+
+    assert event.event_type is NormalizedRealtimeEventType.SESSION_ERROR
+    assert event.state is VoiceSessionState.ERROR
+    assert event.provider_event_type == "error"
+    assert "dashscope-secret" not in event.model_dump_json()
 
 
 def test_dashscope_lifecycle_events_normalize_to_safe_events() -> None:
