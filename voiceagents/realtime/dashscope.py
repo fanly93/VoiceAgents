@@ -1,5 +1,6 @@
 from collections.abc import Mapping
 from dataclasses import dataclass
+from urllib.parse import quote
 
 from voiceagents.realtime.contracts import (
     ALLOWED_REALTIME_TOOL_NAMES,
@@ -14,10 +15,12 @@ from voiceagents.realtime.contracts import (
     VoiceSessionState,
     build_default_realtime_session_config,
 )
+from voiceagents.realtime.outbound import RealtimeBrowserProxyMessage
 
 
 DEFAULT_DASHSCOPE_REALTIME_MODEL = "qwen3.5-omni-flash-realtime"
 DEFAULT_DASHSCOPE_BASE_URL = "https://dashscope.aliyuncs.com"
+DASHSCOPE_REALTIME_WS_PATH = "/api-ws/v1/realtime"
 DASHSCOPE_PROXY_ROUTE_TEMPLATE = "/v1/realtime/dashscope/proxy/{session_id}"
 DASHSCOPE_TRANSCRIPT_EVENT_MAP = {
     "dashscope.transcript.user.delta": (
@@ -136,6 +139,86 @@ class DashScopeRealtimeProvider:
             voice=self._config.voice,
             session_config=build_default_realtime_session_config(),
         )
+
+
+class DashScopeRealtimeAdapter:
+    def __init__(self, config: DashScopeRealtimeConfig) -> None:
+        self._config = config
+
+    def build_connection_url(self) -> str:
+        base_url = self._config.base_url.rstrip("/")
+        if base_url.startswith("https://"):
+            ws_base_url = "wss://" + base_url.removeprefix("https://")
+        elif base_url.startswith("http://"):
+            ws_base_url = "ws://" + base_url.removeprefix("http://")
+        elif base_url.startswith(("ws://", "wss://")):
+            ws_base_url = base_url
+        else:
+            raise DashScopeEventError("DashScope base URL must include a supported scheme")
+        model = quote(self._config.model, safe="")
+        return f"{ws_base_url}{DASHSCOPE_REALTIME_WS_PATH}?model={model}"
+
+    def build_headers(self) -> Mapping[str, str]:
+        if self._config.api_key is None:
+            raise DashScopeEventError("DashScope api key is required for outbound headers")
+        return {"Authorization": f"Bearer {self._config.api_key}"}
+
+    def safe_connection_summary(self) -> Mapping[str, object]:
+        return {
+            "provider": RealtimeProviderName.DASHSCOPE_REALTIME.value,
+            "model": self._config.model,
+            "voice": self._config.voice,
+            "connection_mode": RealtimeConnectionMode.SERVER_WEBSOCKET_PROXY.value,
+            "base_url": self._config.base_url.rstrip("/"),
+            "api_key": "present" if self._config.has_api_key else "missing",
+        }
+
+    def build_session_update_message(self, session_config) -> Mapping[str, object]:
+        raise NotImplementedError
+
+    def map_browser_message(
+        self,
+        message: RealtimeBrowserProxyMessage,
+    ) -> Mapping[str, object] | bytes | None:
+        raise NotImplementedError
+
+    def normalize_provider_event(
+        self,
+        payload: Mapping[str, object],
+        *,
+        session_id: str,
+        call_id: str,
+        merchant_id: str,
+    ):
+        return normalize_dashscope_event(
+            payload,
+            session_id=session_id,
+            call_id=call_id,
+            merchant_id=merchant_id,
+        )
+
+    def normalize_provider_tool_call(
+        self,
+        payload: Mapping[str, object],
+        *,
+        session_id: str,
+        call_id: str,
+        merchant_id: str,
+    ) -> RealtimeToolCallRequest:
+        return normalize_dashscope_tool_call(
+            payload,
+            session_id=session_id,
+            call_id=call_id,
+            merchant_id=merchant_id,
+        )
+
+    def build_tool_result_messages(
+        self,
+        response: RealtimeToolCallResponse,
+        *,
+        provider_call_id: str,
+    ) -> list[Mapping[str, object]]:
+        return [build_dashscope_tool_result_event(response, provider_call_id=provider_call_id)]
 
 
 def normalize_dashscope_event(
