@@ -62,3 +62,42 @@ def test_dashscope_proxy_accepts_valid_session_token() -> None:
             "type": "dashscope.proxy.ready",
             "session_id": "session-123",
         }
+
+
+def test_dashscope_proxy_accepts_allowed_message_envelope() -> None:
+    client, token = create_dashscope_session()
+
+    with client.websocket_connect(
+        f"/v1/realtime/dashscope/proxy/session-123?token={token}"
+    ) as websocket:
+        websocket.receive_json()
+        websocket.send_json({"type": "control", "payload": {"action": "start"}})
+
+        assert websocket.receive_json() == {
+            "type": "dashscope.proxy.accepted",
+            "message_type": "control",
+        }
+
+
+def test_dashscope_proxy_rejects_secret_bearing_message_envelope() -> None:
+    client, token = create_dashscope_session()
+
+    with client.websocket_connect(
+        f"/v1/realtime/dashscope/proxy/session-123?token={token}"
+    ) as websocket:
+        websocket.receive_json()
+        websocket.send_json(
+            {
+                "type": "control",
+                "payload": {"Authorization": "Bearer dashscope-secret"},
+            }
+        )
+
+        assert websocket.receive_json() == {
+            "type": "dashscope.proxy.error",
+            "error_code": "invalid_envelope",
+        }
+        with pytest.raises(WebSocketDisconnect) as error:
+            websocket.receive_json()
+
+    assert error.value.code == 1008

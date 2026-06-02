@@ -41,6 +41,17 @@ DASHSCOPE_TRANSCRIPT_EVENT_MAP = {
         "assistant",
     ),
 }
+ALLOWED_DASHSCOPE_PROXY_MESSAGE_TYPES = {"audio", "control", "tool_result"}
+ALLOWED_DASHSCOPE_PROXY_MESSAGE_KEYS = {"type", "payload"}
+BLOCKED_DASHSCOPE_PROXY_KEYS = {
+    "api_key",
+    "authorization",
+    "client_secret",
+    "dashscope_api_key",
+    "raw_arguments",
+    "sdp",
+    "tool_call_token",
+}
 
 
 class RealtimeProviderError(RuntimeError):
@@ -227,6 +238,33 @@ def build_dashscope_tool_result_event(
         "tool_status": response.tool_status.value,
         "output": output,
     }
+
+
+def validate_dashscope_proxy_message(message: object) -> dict[str, object]:
+    if not isinstance(message, dict):
+        raise DashScopeEventError("DashScope proxy message must be an object")
+    keys = set(message)
+    if keys != ALLOWED_DASHSCOPE_PROXY_MESSAGE_KEYS:
+        raise DashScopeEventError("DashScope proxy message has invalid top-level fields")
+    message_type = message.get("type")
+    if message_type not in ALLOWED_DASHSCOPE_PROXY_MESSAGE_TYPES:
+        raise DashScopeEventError(f"Unsupported DashScope proxy message type: {message_type}")
+    _reject_blocked_proxy_keys(message)
+    payload = message.get("payload")
+    if not isinstance(payload, dict):
+        raise DashScopeEventError("DashScope proxy message payload must be an object")
+    return {"type": message_type, "payload": dict(payload)}
+
+
+def _reject_blocked_proxy_keys(value: object) -> None:
+    if isinstance(value, dict):
+        for key, child in value.items():
+            if key.lower() in BLOCKED_DASHSCOPE_PROXY_KEYS:
+                raise DashScopeEventError(f"DashScope proxy message contains blocked key: {key}")
+            _reject_blocked_proxy_keys(child)
+    elif isinstance(value, list):
+        for child in value:
+            _reject_blocked_proxy_keys(child)
 
 
 def _build_event(

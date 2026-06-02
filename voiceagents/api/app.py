@@ -7,6 +7,7 @@ import uuid
 from fastapi import Body, FastAPI, Header, HTTPException, Request, WebSocket
 from fastapi.responses import FileResponse
 from pydantic import ValidationError
+from starlette.websockets import WebSocketDisconnect
 
 from voiceagents.adapters.handoff import MockHandoffAdapter
 from voiceagents.adapters.knowledge import MockKnowledgeAdapter
@@ -33,6 +34,7 @@ from voiceagents.realtime.diagnostics import (
     RealtimeDevDiagnostics,
     build_realtime_dev_diagnostics,
 )
+from voiceagents.realtime.dashscope import DashScopeEventError, validate_dashscope_proxy_message
 from voiceagents.realtime.event_log import (
     find_blocked_event_keys,
     JsonlRealtimeTranscriptRepository,
@@ -430,6 +432,28 @@ def create_app(
                 "session_id": session_id,
             }
         )
+        while True:
+            try:
+                message = await websocket.receive_json()
+            except WebSocketDisconnect:
+                return
+            try:
+                safe_message = validate_dashscope_proxy_message(message)
+            except DashScopeEventError:
+                await websocket.send_json(
+                    {
+                        "type": "dashscope.proxy.error",
+                        "error_code": "invalid_envelope",
+                    }
+                )
+                await websocket.close(code=1008, reason="Invalid DashScope proxy envelope")
+                return
+            await websocket.send_json(
+                {
+                    "type": "dashscope.proxy.accepted",
+                    "message_type": safe_message["type"],
+                }
+            )
 
     return app
 
