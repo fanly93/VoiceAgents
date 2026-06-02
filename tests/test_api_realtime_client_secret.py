@@ -225,6 +225,40 @@ def test_realtime_client_secret_endpoint_rejects_missing_openai_key(monkeypatch)
         store.get_session("session-123")
 
 
+def test_realtime_client_secret_endpoint_returns_dashscope_proxy_metadata(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("VOICEAGENTS_REALTIME_PROVIDER", "dashscope_realtime")
+    monkeypatch.setenv("VOICEAGENTS_DASHSCOPE_API_KEY", "dashscope-secret")
+    monkeypatch.setenv("VOICEAGENTS_DASHSCOPE_REALTIME_MODEL", "qwen3.5-omni-flash-realtime")
+    store = InMemoryVoiceSessionStore()
+    client = TestClient(create_app(realtime_session_store=store))
+
+    response = client.post(
+        "/v1/realtime/client-secret",
+        json={
+            "session_id": "session-123",
+            "call_id": "call-123",
+            "merchant_id": "merchant-123",
+            "response_mode": "voice",
+            "locale": "zh-CN",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["provider"] == "dashscope_realtime"
+    assert body["connection_mode"] == "server_websocket_proxy"
+    assert body["connection_url"] == "/v1/realtime/dashscope/proxy/session-123"
+    assert body["model"] == "qwen3.5-omni-flash-realtime"
+    assert body["client_secret"] is None
+    assert body["ephemeral_credential"] is None
+    assert body["tool_call_token"]
+    assert store.get_session_provider("session-123") is RealtimeProviderName.DASHSCOPE_REALTIME
+    assert "dashscope-secret" not in response.text
+    assert "DASHSCOPE_API_KEY" not in response.text
+
+
 def test_realtime_client_secret_endpoint_rejects_raw_safety_subject_id(monkeypatch) -> None:
     monkeypatch.setenv("VOICEAGENTS_REALTIME_PROVIDER", "mock")
     client = TestClient(create_app())
