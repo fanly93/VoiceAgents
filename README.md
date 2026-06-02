@@ -15,6 +15,7 @@ Real pilot call recordings are not available yet, so real-call evaluation is def
 - Run local HTTP end-to-end examples against the backend skeleton.
 - Validate browser/local realtime voice session plumbing with mock-safe provider behavior.
 - Operate and validate the merged OpenAI Realtime browser voice MVP behind a local development gate.
+- Test DashScope Realtime through a server-owned `server_websocket_proxy` path with fake-tested outbound transport and manual real-provider smoke checks.
 - Save local redacted realtime validation reports from `/realtime-test` for standard pilot scenarios.
 - Review saved local validation reports in the local-only viewer at `/realtime-validation-reports`.
 
@@ -103,7 +104,7 @@ Realtime API endpoints:
 - `POST /v1/realtime/tool-call` relays approved realtime tool calls to the backend. Send the relay token as `Authorization: Bearer <tool_call_token>`.
 - `WS /v1/realtime/dashscope/proxy/{session_id}` is the local browser-facing DashScope realtime proxy route for `server_websocket_proxy` sessions. It must authenticate with the session-bound tool-call token and must never expose `DASHSCOPE_API_KEY` to the browser.
 
-DashScope outbound transport dependency decision: automated tests use only a fake upstream transport behind the proxy boundary. The real outbound DashScope WebSocket client dependency is intentionally deferred until manual provider verification confirms the required protocol details; no automated test calls real DashScope or requires real provider credentials.
+DashScope outbound transport dependency decision: default automated tests use only fake clients behind the proxy boundary. Local real-provider testing uses a lazy optional `websockets` import inside `voiceagents/realtime/dashscope_transport.py`; `tests/test_realtime_dashscope_live.py` calls real DashScope only when `VOICEAGENTS_RUN_DASHSCOPE_LIVE_TESTS=true` and a server-side DashScope API key are configured.
 
 Realtime provider environment variables:
 
@@ -111,6 +112,8 @@ Realtime provider environment variables:
 - `OPENAI_API_KEY` is required only for `openai_realtime`. `VOICEAGENTS_DASHSCOPE_API_KEY` is required only for `dashscope_realtime`. Provider keys are server-only and must never be exposed to the browser, DOM, logs, tickets, screenshots, or committed files.
 - `VOICEAGENTS_OPENAI_REALTIME_MODEL` defaults to `gpt-realtime-2`.
 - `VOICEAGENTS_OPENAI_REALTIME_VOICE` defaults to `marin`.
+- `VOICEAGENTS_DASHSCOPE_REALTIME_MODEL` defaults to `qwen3.5-omni-flash-realtime`.
+- `VOICEAGENTS_DASHSCOPE_BASE_URL` defaults to `https://dashscope.aliyuncs.com`.
 - `VOICEAGENTS_TRANSCRIPT_LOGGING=off|structured|transcript` controls transcript text logging. When unset, it defaults to `structured`; use `transcript` only when local development explicitly needs verbatim transcript text.
 - `VOICEAGENTS_ENABLE_REALTIME_DEV_ENDPOINTS=false|true` gates the real provider client-secret endpoint. It defaults to `false`; set it to `true` only for local real-provider development.
 
@@ -127,6 +130,30 @@ VOICEAGENTS_TRANSCRIPT_LOGGING=structured
 
 `VOICEAGENTS_ENABLE_REALTIME_DEV_ENDPOINTS=true` is a local development gate for the real provider MVP; it is not production authentication and must not be exposed on a public endpoint. If `OPENAI_API_KEY` is missing, the API fails safely with a 503 response instead of exposing provider credentials. Development and tests must run inside an isolated `.venv` or conda environment, not the system Python environment.
 
+DashScope realtime provider mode can be run locally after installing the optional outbound WebSocket dependency in the isolated environment:
+
+```bash
+./.venv/bin/python -m pip install websockets
+VOICEAGENTS_REALTIME_PROVIDER=dashscope_realtime
+VOICEAGENTS_DASHSCOPE_API_KEY=...
+VOICEAGENTS_DASHSCOPE_REALTIME_MODEL=qwen3.5-omni-flash-realtime
+VOICEAGENTS_DASHSCOPE_BASE_URL=https://dashscope.aliyuncs.com
+VOICEAGENTS_ENABLE_REALTIME_DEV_ENDPOINTS=true
+VOICEAGENTS_TRANSCRIPT_LOGGING=structured
+```
+
+If the local environment routes WebSocket connections through a SOCKS proxy, also install proxy support:
+
+```bash
+./.venv/bin/python -m pip install python-socks
+```
+
+Run the real DashScope model test explicitly with:
+
+```bash
+VOICEAGENTS_RUN_DASHSCOPE_LIVE_TESTS=true ./.venv/bin/python -m pytest tests/test_realtime_dashscope_live.py -q
+```
+
 Current realtime scope is browser/local validation only. This phase does not implement telephony, phone-number provisioning, inbound/outbound calling, or raw audio storage.
 
 Local realtime event logs under `.voiceagents/` are gitignored. Treat the tool-call relay token as a short-lived session credential; do not write it to logs, screenshots, tickets, or committed files.
@@ -137,7 +164,7 @@ Run the realtime smoke test against a running mock-mode server:
 ./.venv/bin/python scripts/smoke_realtime_api.py --base-url http://127.0.0.1:8000
 ```
 
-The realtime smoke script is intentionally mock-mode only. It validates `/health`, client-secret minting, the four approved tool calls, unknown tool rejection, and missing authorization rejection without requiring `OPENAI_API_KEY`. Real OpenAI voice verification is manual; use `docs/specs/voiceagents-openai-realtime-voice-mvp-manual-checklist.md` for the 3 minute `/realtime-test` run and browser failure-mode checks. DashScope realtime proxy validation is documented in `docs/specs/voiceagents-dashscope-realtime-manual-checklist.md`; it currently covers the fake-tested `server_websocket_proxy` boundary and defers real outbound transport.
+The realtime smoke script is intentionally mock-mode only. It validates `/health`, client-secret minting, the four approved tool calls, unknown tool rejection, and missing authorization rejection without requiring real provider keys. Real OpenAI voice verification is manual; use `docs/specs/voiceagents-openai-realtime-voice-mvp-manual-checklist.md` for the 3 minute `/realtime-test` run and browser failure-mode checks. DashScope realtime proxy validation is documented in `docs/specs/voiceagents-dashscope-realtime-manual-checklist.md`; the server proxy owns DashScope event persistence and the browser renders DashScope events without relaying them to `/v1/realtime/event`.
 
 Realtime tool-call responses include safe status semantics:
 

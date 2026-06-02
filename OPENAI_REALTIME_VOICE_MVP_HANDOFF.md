@@ -267,7 +267,7 @@ git diff --check
 
 - Realtime Voice Dev Diagnostics v1 已完成：`GET /v1/realtime/dev-diagnostics`、`/realtime-test` 的 `Run Diagnostics`、`scripts/diagnose_realtime_dev.py`。
 - Realtime Tool Error Semantics v1 已完成：`tool_status` / `error_message`、结构化 tool-call HTTP 错误、adapter exception 安全降级、event log 使用真实 tool status、失败工具结果不回传 provider。
-- DashScope realtime proxy 当前有 fake-tested `server_websocket_proxy` 边界、provider/event/tool adapter 和 `/realtime-test` 基础接线；真实 outbound DashScope WebSocket client 仍按 `docs/specs/voiceagents-dashscope-realtime-manual-checklist.md` 后置到人工验证后决定。
+- DashScope realtime outbound 当前已在 `feat/dashscope-realtime-outbound` 实现：provider-neutral outbound contracts、proxy coordinator、DashScope URL/header/session/tool/event mapping、lazy optional `websockets` outbound transport、server-owned event persistence、provider tool-call result relay、`/realtime-test` DashScope adapter wiring。真实模型手动 smoke 仍按 `docs/specs/voiceagents-dashscope-realtime-manual-checklist.md` 执行，凭证只在本地 env 中提供。
 - Validation Harness v1 还没有 CLI，但当前没有明确痛点，先不做。
 - Validation report viewer v1 只解决本地查看和 1-3 分钟 report prep；public sharing/auth 或生产 report portal 已记录为阶段 2，当前先后置。
 - 客服后台接手页面 / support workbench 已记录为阶段 3，当前先后置。
@@ -279,8 +279,8 @@ git diff --check
 
 推荐切口：
 
-1. Provider adapter boundary hardening：为后续 DashScope、火山云或其他 provider 接入做 provider-neutral contract tests 和 event normalization 校验。
-2. Other model/provider integration planning：在不改业务工具层的前提下，明确 DashScope、火山云或其他 provider 的 server credential、browser/server connection adapter、event normalization 和 tool result mapping。
+1. DashScope real-provider manual smoke：在本地提供 `VOICEAGENTS_DASHSCOPE_API_KEY` 和 optional `websockets` dependency，跑一轮真实语音互动和一轮工具调用互动，不提交任何原始音频、截图、token 或 provider payload。
+2. Next provider planning：复用当前 provider-neutral outbound boundary，为火山云、GLM 或其他 provider 做单独 protocol spike，不改业务工具层。
 3. Realtime session lifecycle cleanup：检查 session、tool token、event log TTL、重复提交、结束状态、handoff 状态转换、异常断线后的状态一致性。
 4. Pilot demo report sharing/auth：阶段 2，已在 `docs/roadmap/voiceagents-phase-2-pilot-merchant-worksplit.md` 记录分工，当前先后置。
 5. Human handoff context viewer / support workbench：阶段 3，已在 `docs/roadmap/voiceagents-phase-3-customer-support-worksplit.md` 记录分工，当前先后置。

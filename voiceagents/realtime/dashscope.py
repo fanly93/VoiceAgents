@@ -1,5 +1,9 @@
+import base64
+import binascii
 from collections.abc import Mapping
 from dataclasses import dataclass
+import json
+from urllib.parse import quote
 
 from voiceagents.realtime.contracts import (
     ALLOWED_REALTIME_TOOL_NAMES,
@@ -9,15 +13,22 @@ from voiceagents.realtime.contracts import (
     RealtimeConnectionMode,
     RealtimeEventIngestRequest,
     RealtimeProviderName,
+    RealtimeSessionConfig,
+    RealtimeToolDefinition,
     RealtimeToolCallRequest,
     RealtimeToolCallResponse,
+    ResponseMode,
     VoiceSessionState,
     build_default_realtime_session_config,
 )
+from voiceagents.realtime.outbound import RealtimeBrowserProxyMessage
+from voiceagents.realtime.outbound import RealtimeBrowserProxyMessageType
+from voiceagents.realtime.outbound import RealtimeOutboundEvent, RealtimeOutboundEventKind
 
 
 DEFAULT_DASHSCOPE_REALTIME_MODEL = "qwen3.5-omni-flash-realtime"
 DEFAULT_DASHSCOPE_BASE_URL = "https://dashscope.aliyuncs.com"
+DASHSCOPE_REALTIME_WS_PATH = "/api-ws/v1/realtime"
 DASHSCOPE_PROXY_ROUTE_TEMPLATE = "/v1/realtime/dashscope/proxy/{session_id}"
 DASHSCOPE_TRANSCRIPT_EVENT_MAP = {
     "dashscope.transcript.user.delta": (
@@ -43,12 +54,15 @@ DASHSCOPE_TRANSCRIPT_EVENT_MAP = {
 }
 ALLOWED_DASHSCOPE_PROXY_MESSAGE_TYPES = {"audio", "control", "tool_result"}
 ALLOWED_DASHSCOPE_PROXY_MESSAGE_KEYS = {"type", "payload"}
+DASHSCOPE_OUTPUT_AUDIO_FORMAT = "pcm24"
+DASHSCOPE_UNSUPPORTED_TOOL_SCHEMA_KEYS = {"additionalProperties", "minLength"}
 BLOCKED_DASHSCOPE_PROXY_KEYS = {
     "api_key",
     "authorization",
     "client_secret",
     "dashscope_api_key",
     "raw_arguments",
+    "raw_audio",
     "sdp",
     "tool_call_token",
 }
@@ -138,6 +152,128 @@ class DashScopeRealtimeProvider:
         )
 
 
+class DashScopeRealtimeAdapter:
+    def __init__(self, config: DashScopeRealtimeConfig) -> None:
+        self._config = config
+
+    def build_connection_url(self) -> str:
+        base_url = self._config.base_url.rstrip("/")
+        if base_url.startswith("https://"):
+            ws_base_url = "wss://" + base_url.removeprefix("https://")
+        elif base_url.startswith("http://"):
+            ws_base_url = "ws://" + base_url.removeprefix("http://")
+        elif base_url.startswith(("ws://", "wss://")):
+            ws_base_url = base_url
+        else:
+            raise DashScopeEventError("DashScope base URL must include a supported scheme")
+        model = quote(self._config.model, safe="")
+        return f"{ws_base_url}{DASHSCOPE_REALTIME_WS_PATH}?model={model}"
+
+    def build_headers(self) -> Mapping[str, str]:
+        if self._config.api_key is None:
+            raise DashScopeEventError("DashScope api key is required for outbound headers")
+        return {"Authorization": f"Bearer {self._config.api_key}"}
+
+    def safe_connection_summary(self) -> Mapping[str, object]:
+        return {
+            "provider": RealtimeProviderName.DASHSCOPE_REALTIME.value,
+            "model": self._config.model,
+            "voice": self._config.voice,
+            "connection_mode": RealtimeConnectionMode.SERVER_WEBSOCKET_PROXY.value,
+            "base_url": self._config.base_url.rstrip("/"),
+            "api_key": "present" if self._config.has_api_key else "missing",
+        }
+
+    def build_session_update_message(
+        self,
+        session_config: RealtimeSessionConfig,
+        *,
+        response_mode: ResponseMode = ResponseMode.VOICE,
+    ) -> Mapping[str, object]:
+        modalities = ["text"] if response_mode is ResponseMode.TEXT else ["text", "audio"]
+        session: dict[str, object] = {
+            "modalities": modalities,
+            "instructions": session_config.instructions,
+            "input_audio_format": "pcm16",
+            "output_audio_format": None
+            if response_mode is ResponseMode.TEXT
+            else DASHSCOPE_OUTPUT_AUDIO_FORMAT,
+            "turn_detection": {"type": "server_vad"},
+            "tools": _map_dashscope_tools(session_config.tools),
+        }
+        if response_mode is ResponseMode.VOICE and self._config.voice is not None:
+            session["voice"] = self._config.voice
+        return {"type": "session.update", "session": session}
+
+    def map_browser_message(
+        self,
+        message: RealtimeBrowserProxyMessage | Mapping[str, object],
+    ) -> Mapping[str, object] | bytes | None:
+        proxy_message = (
+            message
+            if isinstance(message, RealtimeBrowserProxyMessage)
+            else RealtimeBrowserProxyMessage.model_validate(message)
+        )
+        if proxy_message.type is RealtimeBrowserProxyMessageType.CONTROL:
+            action = proxy_message.payload.get("action")
+            if action == "start":
+                return self.build_session_update_message(build_default_realtime_session_config())
+            if action == "commit":
+                return {"type": "input_audio_buffer.commit"}
+            if action == "response.create":
+                return {"type": "response.create"}
+            return None
+        if proxy_message.type is RealtimeBrowserProxyMessageType.AUDIO:
+            frame = proxy_message.payload.get("frame")
+            if not isinstance(frame, str) or not frame:
+                raise DashScopeEventError("DashScope audio proxy frame must be a string")
+            return {"type": "input_audio_buffer.append", "audio": frame}
+        return None
+
+    def normalize_provider_event(
+        self,
+        payload: Mapping[str, object],
+        *,
+        session_id: str,
+        call_id: str,
+        merchant_id: str,
+    ):
+        if _string_field(payload, "type") == "response.audio.delta":
+            return RealtimeOutboundEvent(
+                kind=RealtimeOutboundEventKind.AUDIO,
+                audio=_decode_base64_audio(_string_field(payload, "delta")),
+            )
+        return normalize_dashscope_event(
+            payload,
+            session_id=session_id,
+            call_id=call_id,
+            merchant_id=merchant_id,
+        )
+
+    def normalize_provider_tool_call(
+        self,
+        payload: Mapping[str, object],
+        *,
+        session_id: str,
+        call_id: str,
+        merchant_id: str,
+    ) -> RealtimeToolCallRequest:
+        return normalize_dashscope_tool_call(
+            payload,
+            session_id=session_id,
+            call_id=call_id,
+            merchant_id=merchant_id,
+        )
+
+    def build_tool_result_messages(
+        self,
+        response: RealtimeToolCallResponse,
+        *,
+        provider_call_id: str,
+    ) -> list[Mapping[str, object]]:
+        return build_dashscope_tool_result_messages(response, provider_call_id=provider_call_id)
+
+
 def normalize_dashscope_event(
     payload: Mapping[str, object],
     *,
@@ -146,7 +282,7 @@ def normalize_dashscope_event(
     merchant_id: str,
 ) -> RealtimeEventIngestRequest:
     provider_event_type = _string_field(payload, "type")
-    if provider_event_type == "dashscope.session.started":
+    if provider_event_type in {"dashscope.session.started", "session.created"}:
         return _build_event(
             session_id=session_id,
             call_id=call_id,
@@ -166,7 +302,7 @@ def normalize_dashscope_event(
             provider_event_type=provider_event_type,
             provider_call_id=None,
         )
-    if provider_event_type == "dashscope.session.error":
+    if provider_event_type in {"dashscope.session.error", "error"}:
         return _build_event(
             session_id=session_id,
             call_id=call_id,
@@ -189,7 +325,88 @@ def normalize_dashscope_event(
             speaker=speaker,
             text=_string_field(payload, "text"),
         )
+    if provider_event_type == "conversation.item.input_audio_transcription.completed":
+        return _build_event(
+            session_id=session_id,
+            call_id=call_id,
+            merchant_id=merchant_id,
+            event_type=NormalizedRealtimeEventType.TRANSCRIPT_USER_DONE,
+            state=VoiceSessionState.THINKING,
+            provider_event_type=provider_event_type,
+            provider_call_id=None,
+            speaker="user",
+            text=_string_field(payload, "transcript"),
+        )
+    if provider_event_type == "response.output_audio_transcript.delta":
+        return _build_event(
+            session_id=session_id,
+            call_id=call_id,
+            merchant_id=merchant_id,
+            event_type=NormalizedRealtimeEventType.TRANSCRIPT_ASSISTANT_DELTA,
+            state=VoiceSessionState.SPEAKING,
+            provider_event_type=provider_event_type,
+            provider_call_id=None,
+            speaker="assistant",
+            text=_string_field(payload, "delta"),
+        )
+    if provider_event_type == "response.output_audio_transcript.done":
+        return _build_event(
+            session_id=session_id,
+            call_id=call_id,
+            merchant_id=merchant_id,
+            event_type=NormalizedRealtimeEventType.TRANSCRIPT_ASSISTANT_DONE,
+            state=VoiceSessionState.LISTENING,
+            provider_event_type=provider_event_type,
+            provider_call_id=None,
+            speaker="assistant",
+            text=_string_field(payload, "transcript"),
+        )
+    if provider_event_type == "response.done":
+        return _build_event(
+            session_id=session_id,
+            call_id=call_id,
+            merchant_id=merchant_id,
+            event_type=NormalizedRealtimeEventType.RESPONSE_DONE,
+            state=VoiceSessionState.LISTENING,
+            provider_event_type=provider_event_type,
+            provider_call_id=None,
+        )
     raise DashScopeEventError(f"Unsupported DashScope event: {provider_event_type}")
+
+
+def _map_dashscope_tools(tools: list[RealtimeToolDefinition]) -> list[dict[str, object]]:
+    mapped_tools: list[dict[str, object]] = []
+    for tool in tools:
+        if tool.name not in ALLOWED_REALTIME_TOOL_NAMES:
+            continue
+        mapped_tools.append(
+            {
+                "type": "function",
+                "name": tool.name,
+                "description": tool.description,
+                "parameters": _sanitize_dashscope_tool_schema(tool.parameters_schema),
+            }
+        )
+    return mapped_tools
+
+
+def _sanitize_dashscope_tool_schema(value: object) -> object:
+    if isinstance(value, dict):
+        sanitized: dict[str, object] = {}
+        for key, child in value.items():
+            if key in DASHSCOPE_UNSUPPORTED_TOOL_SCHEMA_KEYS:
+                continue
+            if key == "type" and isinstance(child, list):
+                supported_types = [
+                    item for item in child if isinstance(item, str) and item != "null"
+                ]
+                sanitized[key] = supported_types[0] if supported_types else "string"
+                continue
+            sanitized[key] = _sanitize_dashscope_tool_schema(child)
+        return sanitized
+    if isinstance(value, list):
+        return [_sanitize_dashscope_tool_schema(item) for item in value]
+    return value
 
 
 def normalize_dashscope_tool_call(
@@ -200,12 +417,25 @@ def normalize_dashscope_tool_call(
     merchant_id: str,
 ) -> RealtimeToolCallRequest:
     provider_event_type = _string_field(payload, "type")
-    if provider_event_type != "dashscope.tool_call.requested":
+    if provider_event_type not in {
+        "dashscope.tool_call.requested",
+        "response.function_call_arguments.done",
+    }:
         raise DashScopeEventError(f"Unsupported DashScope tool event: {provider_event_type}")
-    tool_name = _string_field(payload, "tool_name")
+    tool_name = (
+        _string_field(payload, "name")
+        if provider_event_type == "response.function_call_arguments.done"
+        else _string_field(payload, "tool_name")
+    )
     if tool_name not in ALLOWED_REALTIME_TOOL_NAMES:
         raise DashScopeEventError(f"Unsupported DashScope tool: {tool_name}")
     arguments = payload.get("arguments")
+    if isinstance(arguments, str):
+        try:
+            parsed_arguments = json.loads(arguments)
+        except json.JSONDecodeError as error:
+            raise DashScopeEventError("DashScope tool call arguments must be valid JSON") from error
+        arguments = parsed_arguments
     if not isinstance(arguments, dict):
         raise DashScopeEventError("DashScope tool call arguments must be an object")
     return RealtimeToolCallRequest(
@@ -238,6 +468,33 @@ def build_dashscope_tool_result_event(
         "tool_status": response.tool_status.value,
         "output": output,
     }
+
+
+def build_dashscope_tool_result_messages(
+    response: RealtimeToolCallResponse,
+    *,
+    provider_call_id: str,
+) -> list[Mapping[str, object]]:
+    output: dict[str, object] = {
+        "ok": response.ok,
+        "safe_summary": response.safe_summary,
+        "error_message": response.error_message,
+        "error_code": response.error_code.value if response.error_code is not None else None,
+        "handoff_required": response.handoff_required,
+    }
+    if response.ok:
+        output["result"] = response.result
+    return [
+        {
+            "type": "conversation.item.create",
+            "item": {
+                "type": "function_call_output",
+                "call_id": provider_call_id,
+                "output": json.dumps(output, sort_keys=True),
+            },
+        },
+        {"type": "response.create"},
+    ]
 
 
 def validate_dashscope_proxy_message(message: object) -> dict[str, object]:
@@ -298,3 +555,10 @@ def _string_field(payload: Mapping[str, object], name: str) -> str:
     if not isinstance(value, str) or not value:
         raise DashScopeEventError(f"DashScope event missing {name}")
     return value
+
+
+def _decode_base64_audio(value: str) -> bytes:
+    try:
+        return base64.b64decode(value, validate=True)
+    except (binascii.Error, ValueError) as error:
+        raise DashScopeEventError("DashScope audio delta must be valid base64") from error

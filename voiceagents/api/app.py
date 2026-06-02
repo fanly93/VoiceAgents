@@ -1,5 +1,5 @@
+from collections.abc import Callable
 from datetime import datetime, timezone
-import inspect
 import os
 from pathlib import Path
 from urllib.parse import urlparse
@@ -8,7 +8,6 @@ import uuid
 from fastapi import Body, FastAPI, Header, HTTPException, Request, WebSocket
 from fastapi.responses import FileResponse
 from pydantic import ValidationError
-from starlette.websockets import WebSocketDisconnect
 
 from voiceagents.adapters.handoff import MockHandoffAdapter
 from voiceagents.adapters.knowledge import MockKnowledgeAdapter
@@ -36,10 +35,13 @@ from voiceagents.realtime.diagnostics import (
     build_realtime_dev_diagnostics,
 )
 from voiceagents.realtime.dashscope import (
-    DashScopeEventError,
-    normalize_dashscope_event,
+    DashScopeRealtimeAdapter,
+    DashScopeRealtimeConfig,
+    build_dashscope_tool_result_messages,
+    normalize_dashscope_tool_call,
     validate_dashscope_proxy_message,
 )
+from voiceagents.realtime.dashscope_transport import DashScopeRealtimeTransport
 from voiceagents.realtime.event_log import (
     find_blocked_event_keys,
     JsonlRealtimeTranscriptRepository,
@@ -53,6 +55,7 @@ from voiceagents.realtime.providers import (
     RealtimeProviderError,
     build_realtime_provider,
 )
+from voiceagents.realtime.proxy import RealtimeProxyCoordinator
 from voiceagents.realtime.redaction import redact_text
 from voiceagents.realtime.session_store import InMemoryVoiceSessionStore, VoiceSessionNotFound
 from voiceagents.realtime.tool_router import (
@@ -78,6 +81,9 @@ REALTIME_VALIDATION_REPORTS_PAGE_PATH = (
     Path(__file__).parent / "static" / "realtime-validation-reports.html"
 )
 REALTIME_OPENAI_ADAPTER_PATH = Path(__file__).parent / "static" / "realtime-openai-adapter.js"
+REALTIME_DASHSCOPE_ADAPTER_PATH = (
+    Path(__file__).parent / "static" / "realtime-dashscope-adapter.js"
+)
 DEFAULT_REALTIME_CLIENT_SECRET_RATE_LIMIT = 20
 
 
@@ -88,6 +94,7 @@ def create_app(
     realtime_transcript_repository: RealtimeTranscriptRepository | None = None,
     realtime_validation_repository: ValidationRunRepository | None = None,
     dashscope_upstream_transport: object | None = None,
+    dashscope_upstream_transport_factory: Callable[[], object] | None = None,
 ) -> FastAPI:
     app = FastAPI(title="VoiceAgents")
     call_flow_service = CallFlowService(
@@ -113,6 +120,7 @@ def create_app(
     app.state.realtime_validation_repository = validation_repository
     app.state.realtime_client_secret_rate_limits = {}
     app.state.dashscope_upstream_transport = dashscope_upstream_transport
+    app.state.dashscope_upstream_transport_factory = dashscope_upstream_transport_factory
 
     @app.get("/health")
     def health() -> dict[str, str]:
@@ -133,6 +141,10 @@ def create_app(
     @app.get("/static/realtime-openai-adapter.js")
     def realtime_openai_adapter() -> FileResponse:
         return FileResponse(REALTIME_OPENAI_ADAPTER_PATH, media_type="application/javascript")
+
+    @app.get("/static/realtime-dashscope-adapter.js")
+    def realtime_dashscope_adapter() -> FileResponse:
+        return FileResponse(REALTIME_DASHSCOPE_ADAPTER_PATH, media_type="application/javascript")
 
     @app.get("/v1/realtime/validation-scenarios")
     def list_realtime_validation_scenarios() -> list:
@@ -418,72 +430,37 @@ def create_app(
 
     @app.websocket("/v1/realtime/dashscope/proxy/{session_id}")
     async def dashscope_realtime_proxy(websocket: WebSocket, session_id: str) -> None:
-        token = websocket.query_params.get("token")
-        if token is None:
-            await websocket.close(code=1008, reason="Missing DashScope proxy token")
-            return
-        try:
-            provider_name = session_store.get_session_provider(session_id)
-            token_is_valid = session_store.verify_tool_call_token(session_id, token)
-        except VoiceSessionNotFound:
-            await websocket.close(code=1008, reason="Invalid DashScope proxy session")
-            return
-        if provider_name is not RealtimeProviderName.DASHSCOPE_REALTIME or not token_is_valid:
-            await websocket.close(code=1008, reason="Invalid DashScope proxy token")
-            return
-
-        await websocket.accept()
-        await websocket.send_json(
-            {
-                "type": "dashscope.proxy.ready",
-                "session_id": session_id,
-            }
-        )
-        while True:
-            try:
-                message = await websocket.receive_json()
-            except WebSocketDisconnect:
-                return
-            try:
-                safe_message = validate_dashscope_proxy_message(message)
-            except DashScopeEventError:
-                await websocket.send_json(
-                    {
-                        "type": "dashscope.proxy.error",
-                        "error_code": "invalid_envelope",
-                    }
-                )
-                await websocket.close(code=1008, reason="Invalid DashScope proxy envelope")
-                return
-            await websocket.send_json(
+        coordinator = RealtimeProxyCoordinator(
+            session_store=session_store,
+            session_id=session_id,
+            token=websocket.query_params.get("token"),
+            provider=RealtimeProviderName.DASHSCOPE_REALTIME,
+            validate_message=validate_dashscope_proxy_message,
+            ready_event_type="dashscope.proxy.ready",
+            accepted_event_type="dashscope.proxy.accepted",
+            error_event_type="dashscope.proxy.error",
+            upstream_transport=dashscope_upstream_transport,
+            upstream_transport_factory=(
+                dashscope_upstream_transport_factory or _build_dashscope_upstream_transport_factory()
+            ),
+            map_browser_message=_build_dashscope_browser_message_mapper()
+            if dashscope_upstream_transport is None
+            else None,
+            normalize_provider_event=_build_dashscope_provider_event_normalizer(),
+            event_repository=event_repository,
+            transcript_logging_mode=_current_transcript_logging_mode(),
+            tool_router=tool_router,
+            normalize_tool_call=normalize_dashscope_tool_call,
+            build_tool_result_messages=build_dashscope_tool_result_messages,
+            tool_call_event_types=frozenset(
                 {
-                    "type": "dashscope.proxy.accepted",
-                    "message_type": safe_message["type"],
+                    "dashscope.tool_call.requested",
+                    "response.function_call_arguments.done",
                 }
-            )
-            if dashscope_upstream_transport is not None:
-                provider_event = await _send_dashscope_upstream(
-                    dashscope_upstream_transport,
-                    safe_message,
-                )
-                normalized_event = normalize_dashscope_event(
-                    provider_event,
-                    session_id=session_id,
-                    call_id=session_store.get_session(session_id).call_id,
-                    merchant_id=session_store.get_session(session_id).merchant_id,
-                )
-                await websocket.send_json(
-                    {
-                        "type": "dashscope.proxy.event",
-                        "event": {
-                            "provider": normalized_event.provider.value,
-                            "event_type": normalized_event.event_type.value,
-                            "state": normalized_event.state.value,
-                            "speaker": normalized_event.speaker,
-                            "text": normalized_event.text,
-                        },
-                    }
-                )
+            ),
+            tool_result_event_type="dashscope.proxy.tool_result",
+        )
+        await coordinator.run(websocket)
 
     return app
 
@@ -587,6 +564,31 @@ def _build_realtime_provider(
         raise HTTPException(status_code=500, detail=str(error)) from error
 
 
+def _build_dashscope_upstream_transport_factory() -> Callable[[], object] | None:
+    config = DashScopeRealtimeConfig.from_env(os.environ)
+    if not config.has_api_key:
+        return None
+
+    def factory() -> DashScopeRealtimeTransport:
+        return DashScopeRealtimeTransport(DashScopeRealtimeAdapter(config))
+
+    return factory
+
+
+def _build_dashscope_browser_message_mapper() -> Callable[[dict[str, object]], object] | None:
+    config = DashScopeRealtimeConfig.from_env(os.environ)
+    if not config.has_api_key:
+        return None
+    adapter = DashScopeRealtimeAdapter(config)
+    return adapter.map_browser_message
+
+
+def _build_dashscope_provider_event_normalizer() -> Callable[..., object]:
+    config = DashScopeRealtimeConfig.from_env(os.environ)
+    adapter = DashScopeRealtimeAdapter(config)
+    return adapter.normalize_provider_event
+
+
 def _extract_bearer_token(authorization: str | None) -> str:
     if not authorization:
         raise HTTPException(status_code=401, detail="Missing Authorization header")
@@ -618,18 +620,3 @@ def _parse_provider_expiry(expires_at: str | None) -> datetime | None:
         return datetime.fromisoformat(normalized)
     except ValueError:
         return None
-
-
-async def _send_dashscope_upstream(
-    transport: object,
-    message: dict[str, object],
-) -> dict[str, object]:
-    sender = getattr(transport, "send", None)
-    if sender is None:
-        raise RuntimeError("DashScope upstream transport must define send")
-    result = sender(message)
-    if inspect.isawaitable(result):
-        result = await result
-    if not isinstance(result, dict):
-        raise RuntimeError("DashScope upstream transport returned invalid event")
-    return result

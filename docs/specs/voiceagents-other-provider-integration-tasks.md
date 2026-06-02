@@ -293,13 +293,14 @@ Status: DONE
 
 Inputs:
 
+- `VOICEAGENTS_ENABLE_REALTIME_DEV_ENDPOINTS`;
 - `VOICEAGENTS_DASHSCOPE_API_KEY`;
 - `VOICEAGENTS_DASHSCOPE_REALTIME_MODEL`;
 - `VOICEAGENTS_DASHSCOPE_BASE_URL`.
 
 Outputs:
 
-- diagnostics checks for DashScope key presence, model, base URL/region, and connection mode;
+- diagnostics checks for DashScope dev gate, key presence, model, base URL/region, and connection mode;
 - tests proving secret values are never printed.
 
 Validation:
