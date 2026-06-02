@@ -26,6 +26,7 @@ NormalizeProviderEvent = Callable[..., RealtimeEventIngestRequest]
 NormalizeToolCall = Callable[..., RealtimeToolCallRequest]
 BuildToolResultMessages = Callable[..., list[Mapping[str, object]]]
 UpstreamTransportFactory = Callable[[], object]
+MapBrowserMessage = Callable[[Mapping[str, object]], Mapping[str, object] | bytes | None]
 
 
 @dataclass
@@ -40,6 +41,7 @@ class RealtimeProxyCoordinator:
     error_event_type: str
     upstream_transport: object | None = None
     upstream_transport_factory: UpstreamTransportFactory | None = None
+    map_browser_message: MapBrowserMessage | None = None
     normalize_provider_event: NormalizeProviderEvent | None = None
     event_repository: VoiceEventRepository | None = None
     transcript_logging_mode: TranscriptLoggingMode = TranscriptLoggingMode.STRUCTURED
@@ -87,7 +89,14 @@ class RealtimeProxyCoordinator:
                 )
                 upstream_transport = await self._get_upstream_transport()
                 if upstream_transport is not None and self.normalize_provider_event is not None:
-                    provider_event = await _send_upstream(upstream_transport, safe_message)
+                    provider_message = (
+                        self.map_browser_message(safe_message)
+                        if self.map_browser_message is not None
+                        else safe_message
+                    )
+                    if provider_message is None:
+                        continue
+                    provider_event = await _send_upstream(upstream_transport, provider_message)
                     session = self.session_store.get_session(self.session_id)
                     if self._is_tool_call_event(provider_event):
                         tool_response = self._execute_tool_call(provider_event, session)

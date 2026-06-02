@@ -444,6 +444,9 @@ def create_app(
             upstream_transport_factory=(
                 dashscope_upstream_transport_factory or _build_dashscope_upstream_transport_factory()
             ),
+            map_browser_message=_build_dashscope_browser_message_mapper()
+            if dashscope_upstream_transport is None
+            else None,
             normalize_provider_event=normalize_dashscope_event,
             event_repository=event_repository,
             transcript_logging_mode=_current_transcript_logging_mode(),
@@ -571,6 +574,14 @@ def _build_dashscope_upstream_transport_factory() -> Callable[[], object] | None
         return DashScopeRealtimeTransport(DashScopeRealtimeAdapter(config))
 
     return factory
+
+
+def _build_dashscope_browser_message_mapper() -> Callable[[dict[str, object]], object] | None:
+    config = DashScopeRealtimeConfig.from_env(os.environ)
+    if not config.has_api_key:
+        return None
+    adapter = DashScopeRealtimeAdapter(config)
+    return adapter.map_browser_message
 
 
 def _extract_bearer_token(authorization: str | None) -> str:

@@ -22,6 +22,7 @@ from voiceagents.realtime.contracts import (
     build_default_realtime_session_config,
 )
 from voiceagents.realtime.outbound import RealtimeBrowserProxyMessage
+from voiceagents.realtime.outbound import RealtimeBrowserProxyMessageType
 from voiceagents.realtime.outbound import RealtimeOutboundEvent, RealtimeOutboundEventKind
 
 
@@ -201,9 +202,28 @@ class DashScopeRealtimeAdapter:
 
     def map_browser_message(
         self,
-        message: RealtimeBrowserProxyMessage,
+        message: RealtimeBrowserProxyMessage | Mapping[str, object],
     ) -> Mapping[str, object] | bytes | None:
-        raise NotImplementedError
+        proxy_message = (
+            message
+            if isinstance(message, RealtimeBrowserProxyMessage)
+            else RealtimeBrowserProxyMessage.model_validate(message)
+        )
+        if proxy_message.type is RealtimeBrowserProxyMessageType.CONTROL:
+            action = proxy_message.payload.get("action")
+            if action == "start":
+                return self.build_session_update_message(build_default_realtime_session_config())
+            if action == "commit":
+                return {"type": "input_audio_buffer.commit"}
+            if action == "response.create":
+                return {"type": "response.create"}
+            return None
+        if proxy_message.type is RealtimeBrowserProxyMessageType.AUDIO:
+            frame = proxy_message.payload.get("frame")
+            if not isinstance(frame, str) or not frame:
+                raise DashScopeEventError("DashScope audio proxy frame must be a string")
+            return {"type": "input_audio_buffer.append", "audio": frame}
+        return None
 
     def normalize_provider_event(
         self,
