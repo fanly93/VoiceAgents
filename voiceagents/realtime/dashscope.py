@@ -2,12 +2,14 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 
 from voiceagents.realtime.contracts import (
+    ALLOWED_REALTIME_TOOL_NAMES,
     NormalizedRealtimeEventType,
     RealtimeClientSecretRequest,
     RealtimeClientSecretResponse,
     RealtimeConnectionMode,
     RealtimeEventIngestRequest,
     RealtimeProviderName,
+    RealtimeToolCallRequest,
     VoiceSessionState,
     build_default_realtime_session_config,
 )
@@ -176,6 +178,31 @@ def normalize_dashscope_event(
             text=_string_field(payload, "text"),
         )
     raise DashScopeEventError(f"Unsupported DashScope event: {provider_event_type}")
+
+
+def normalize_dashscope_tool_call(
+    payload: Mapping[str, object],
+    *,
+    session_id: str,
+    call_id: str,
+    merchant_id: str,
+) -> RealtimeToolCallRequest:
+    provider_event_type = _string_field(payload, "type")
+    if provider_event_type != "dashscope.tool_call.requested":
+        raise DashScopeEventError(f"Unsupported DashScope tool event: {provider_event_type}")
+    tool_name = _string_field(payload, "tool_name")
+    if tool_name not in ALLOWED_REALTIME_TOOL_NAMES:
+        raise DashScopeEventError(f"Unsupported DashScope tool: {tool_name}")
+    arguments = payload.get("arguments")
+    if not isinstance(arguments, dict):
+        raise DashScopeEventError("DashScope tool call arguments must be an object")
+    return RealtimeToolCallRequest(
+        session_id=session_id,
+        call_id=call_id,
+        merchant_id=merchant_id,
+        tool_name=tool_name,
+        arguments=dict(arguments),
+    )
 
 
 def _build_event(

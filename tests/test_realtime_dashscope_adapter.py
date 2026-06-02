@@ -8,6 +8,7 @@ from voiceagents.realtime.contracts import (
 from voiceagents.realtime.dashscope import (
     DashScopeEventError,
     normalize_dashscope_event,
+    normalize_dashscope_tool_call,
 )
 
 
@@ -83,3 +84,36 @@ def test_dashscope_transcript_events_normalize_to_transcript_payloads() -> None:
     assert assistant_done.event_type is NormalizedRealtimeEventType.TRANSCRIPT_ASSISTANT_DONE
     assert assistant_done.speaker == "assistant"
     assert "base64-raw-audio" not in user_delta.model_dump_json()
+
+
+def test_dashscope_tool_call_event_normalizes_to_tool_request() -> None:
+    request = normalize_dashscope_tool_call(
+        {
+            "type": "dashscope.tool_call.requested",
+            "tool_name": "lookup_order",
+            "arguments": {"order_id": "ORD-20260601-1842"},
+        },
+        session_id="session-123",
+        call_id="call-123",
+        merchant_id="merchant-123",
+    )
+
+    assert request.session_id == "session-123"
+    assert request.call_id == "call-123"
+    assert request.merchant_id == "merchant-123"
+    assert request.tool_name == "lookup_order"
+    assert request.arguments == {"order_id": "ORD-20260601-1842"}
+
+
+def test_dashscope_tool_call_event_rejects_unknown_tool() -> None:
+    with pytest.raises(DashScopeEventError, match="Unsupported DashScope tool"):
+        normalize_dashscope_tool_call(
+            {
+                "type": "dashscope.tool_call.requested",
+                "tool_name": "run_shell",
+                "arguments": {},
+            },
+            session_id="session-123",
+            call_id="call-123",
+            merchant_id="merchant-123",
+        )
