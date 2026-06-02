@@ -373,10 +373,14 @@ def test_tool_call_response_contains_safe_output_shape() -> None:
         handoff_required=True,
         handoff_reason=HandoffReason.TOOL_ERROR,
         error_code=ToolErrorCode.NOT_FOUND,
+        tool_status="failed",
+        error_message="Order was not found.",
     )
 
     assert response.handoff_required is True
     assert response.error_code is ToolErrorCode.NOT_FOUND
+    assert response.tool_status == "failed"
+    assert response.error_message == "Order was not found."
 
 
 def test_default_session_config_contains_only_allowed_tools() -> None:

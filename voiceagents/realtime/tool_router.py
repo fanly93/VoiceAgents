@@ -1,6 +1,6 @@
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from voiceagents.contracts.common import HandoffReason
+from voiceagents.contracts.common import HandoffReason, ToolErrorCode
 from voiceagents.contracts.handoff import HandoffRequest
 from voiceagents.contracts.knowledge import ProductKnowledgeRequest
 from voiceagents.contracts.logistics import LookupLogisticsRequest
@@ -10,6 +10,7 @@ from voiceagents.realtime.contracts import (
     RealtimeProviderName,
     RealtimeToolCallRequest,
     RealtimeToolCallResponse,
+    RealtimeToolStatus,
 )
 from voiceagents.realtime.session_store import InMemoryVoiceSessionStore, VoiceSessionNotFound
 
@@ -121,14 +122,17 @@ class RealtimeToolRouter:
         self.validate_request(request, tool_call_token, provider=provider)
         arguments = self.validate_arguments(request)
 
-        if isinstance(arguments, LookupOrderArguments):
-            return self._lookup_order(request, arguments)
-        if isinstance(arguments, LookupLogisticsArguments):
-            return self._lookup_logistics(request, arguments)
-        if isinstance(arguments, QueryProductKnowledgeArguments):
-            return self._query_product_knowledge(request, arguments)
-        if isinstance(arguments, HandoffToHumanArguments):
-            return self._handoff_to_human(request, arguments)
+        try:
+            if isinstance(arguments, LookupOrderArguments):
+                return self._lookup_order(request, arguments)
+            if isinstance(arguments, LookupLogisticsArguments):
+                return self._lookup_logistics(request, arguments)
+            if isinstance(arguments, QueryProductKnowledgeArguments):
+                return self._query_product_knowledge(request, arguments)
+            if isinstance(arguments, HandoffToHumanArguments):
+                return self._handoff_to_human(request, arguments)
+        except Exception:
+            return _safe_tool_system_error_response(request)
 
         raise UnknownRealtimeToolError(f"Realtime tool is not routed yet: {request.tool_name}")
 
@@ -152,6 +156,10 @@ class RealtimeToolRouter:
             handoff_required=handoff_required,
             handoff_reason=HandoffReason.TOOL_ERROR if handoff_required else HandoffReason.NONE,
             error_code=response.error_code,
+            tool_status=(
+                RealtimeToolStatus.COMPLETED if response.ok else RealtimeToolStatus.FAILED
+            ),
+            error_message=response.user_summary if not response.ok else None,
         )
 
     def _query_product_knowledge(
@@ -184,6 +192,8 @@ class RealtimeToolRouter:
                 HandoffReason.RAG_LOW_CONFIDENCE if handoff_required else HandoffReason.NONE
             ),
             error_code=response.error_code,
+            tool_status=_knowledge_tool_status(handoff_required=handoff_required, ok=response.ok),
+            error_message=response.short_answer if not response.ok else None,
         )
 
     def _handoff_to_human(
@@ -221,6 +231,8 @@ class RealtimeToolRouter:
             handoff_required=True,
             handoff_reason=arguments.reason,
             error_code=None,
+            tool_status=RealtimeToolStatus.HANDOFF_REQUIRED,
+            error_message=None if response.ok else arguments.summary,
         )
 
     def _lookup_logistics(
@@ -248,4 +260,36 @@ class RealtimeToolRouter:
             handoff_required=handoff_required,
             handoff_reason=HandoffReason.TOOL_ERROR if handoff_required else HandoffReason.NONE,
             error_code=response.error_code,
+            tool_status=(
+                RealtimeToolStatus.COMPLETED if response.ok else RealtimeToolStatus.FAILED
+            ),
+            error_message=response.user_summary if not response.ok else None,
         )
+
+
+def _knowledge_tool_status(*, handoff_required: bool, ok: bool) -> RealtimeToolStatus:
+    if handoff_required:
+        return RealtimeToolStatus.HANDOFF_REQUIRED
+    if ok:
+        return RealtimeToolStatus.COMPLETED
+    return RealtimeToolStatus.FAILED
+
+
+def _safe_tool_system_error_response(
+    request: RealtimeToolCallRequest,
+) -> RealtimeToolCallResponse:
+    summary = (
+        "The backend tool had a temporary problem. "
+        "A human agent should review the request if the customer still needs help."
+    )
+    return RealtimeToolCallResponse(
+        ok=False,
+        tool_name=request.tool_name,
+        result={},
+        safe_summary=summary,
+        handoff_required=True,
+        handoff_reason=HandoffReason.TOOL_ERROR,
+        error_code=ToolErrorCode.SYSTEM_ERROR,
+        tool_status=RealtimeToolStatus.FAILED,
+        error_message=summary,
+    )
