@@ -24,6 +24,7 @@ Expected result:
 
 ```bash
 VOICEAGENTS_REALTIME_PROVIDER=dashscope_realtime
+VOICEAGENTS_ENABLE_REALTIME_DEV_ENDPOINTS=true
 VOICEAGENTS_DASHSCOPE_API_KEY=...
 VOICEAGENTS_DASHSCOPE_REALTIME_MODEL=qwen3.5-omni-flash-realtime
 VOICEAGENTS_DASHSCOPE_BASE_URL=https://dashscope.aliyuncs.com
@@ -43,6 +44,7 @@ Current implementation exposes the browser-safe local proxy boundary and fake up
 Manual validation should confirm:
 
 - `/v1/realtime/client-secret` returns provider `dashscope_realtime`, model `qwen3.5-omni-flash-realtime`, connection mode `server_websocket_proxy`, and a local proxy URL.
+- `/v1/realtime/client-secret` rejects DashScope requests unless `VOICEAGENTS_ENABLE_REALTIME_DEV_ENDPOINTS=true` is set on the local server.
 - The response does not include `DASHSCOPE_API_KEY`, Authorization headers, SDP, raw audio, or client secrets.
 - `/realtime-test` shows provider, model, connection mode, and safe DashScope proxy status.
 - Missing, wrong, or expired proxy token attempts are rejected.
