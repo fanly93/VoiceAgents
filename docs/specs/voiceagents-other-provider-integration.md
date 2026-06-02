@@ -145,7 +145,9 @@ DashScope proxy contract:
 
 Dependency rule:
 
-- If implementation needs a WebSocket client dependency, the task must name it, add it deliberately, and include a focused test or smoke proving the proxy path still runs without real DashScope credentials.
+- Use FastAPI/Starlette's native WebSocket support for the browser-facing local route.
+- If implementation needs an outbound DashScope WebSocket client dependency, add it deliberately in the upstream transport task, keep it isolated behind a fake-testable transport interface, and include a focused test proving the proxy path still runs without real DashScope credentials.
+- The implementation is not complete if it only returns proxy metadata. It must also include a fake-upstream relay test that proves browser messages can traverse the VoiceAgents proxy boundary and receive a normalized safe response.
 
 DashScope v1 must map:
 

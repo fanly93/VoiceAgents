@@ -71,6 +71,34 @@ git add docs/designs/voiceagents-other-provider-integration.md docs/specs/voicea
 git commit -m "docs: align other provider integration specs"
 ```
 
+### Task 0.3: Repair Autoplan Review Findings
+
+Status: DONE
+
+Inputs:
+
+- gstack-autoplan/plan review focus: product scope, engineering risk, DX, and DashScope proxy blind spots;
+- finding: Phase 5 previously returned proxy metadata but did not require a fake-upstream WebSocket relay test.
+
+Outputs:
+
+- spec clarifies that DashScope proxy completion requires a browser-facing route and fake-upstream relay coverage;
+- Phase 5 is split into route, auth, envelope, fake relay, page wiring, checklist, and verification tasks.
+
+Validation:
+
+```bash
+rg -n "fake-upstream relay|WebSocket support|Proxy Route|Proxy Message Envelope|Fake Upstream Relay" docs/specs/voiceagents-other-provider-integration.md docs/specs/voiceagents-other-provider-integration-tasks.md
+git diff --check
+```
+
+Checkpoint:
+
+```bash
+git add docs/specs/voiceagents-other-provider-integration.md docs/specs/voiceagents-other-provider-integration-tasks.md
+git commit -m "docs: tighten dashscope proxy plan"
+```
+
 ## Phase 1: Provider-Neutral Contracts
 
 Goal: add explicit provider capability and connection contracts without changing runtime behavior.
@@ -507,7 +535,7 @@ git commit -m "feat: add dashscope realtime provider adapter"
 
 ## Phase 5: Browser-Safe Proxy And Manual Verification
 
-Goal: expose a utilitarian DashScope developer path without exposing provider credentials.
+Goal: expose a utilitarian DashScope developer path with a fake-tested proxy boundary and without exposing provider credentials.
 
 Primary files:
 
@@ -516,6 +544,7 @@ Primary files:
 - `voiceagents/api/static/realtime-dashscope-adapter.js`
 - `tests/test_api_realtime_test_page.py`
 - `tests/test_api_realtime_client_secret.py`
+- `tests/test_api_realtime_dashscope_proxy.py`
 - `docs/specs/voiceagents-dashscope-realtime-manual-checklist.md`
 - `README.md`
 - `OPENAI_REALTIME_VOICE_MVP_HANDOFF.md`
@@ -527,17 +556,17 @@ Status: TODO
 Inputs:
 
 - DashScope proxy contract from spec;
-- FastAPI/Starlette WebSocket support and dependency constraints.
+- FastAPI/Starlette native WebSocket support for browser-facing proxy routes.
 
 Outputs:
 
-- exact local proxy route and message envelope documented in README or manual checklist;
-- test placeholder or route assertion proving the route is discoverable without real DashScope.
+- exact local proxy route documented in README or manual checklist;
+- route discovery test proving the route is declared without requiring real DashScope credentials.
 
 Validation:
 
 ```bash
-./.venv/bin/python -m pytest tests/test_api_realtime_client_secret.py -v
+./.venv/bin/python -m pytest tests/test_api_realtime_client_secret.py tests/test_api_realtime_dashscope_proxy.py -v
 ```
 
 ### Task 5.2: Return DashScope Proxy Metadata To Browser
@@ -560,7 +589,92 @@ Validation:
 ./.venv/bin/python -m pytest tests/test_api_realtime_client_secret.py -v
 ```
 
-### Task 5.3: Add Utilitarian DashScope Test Page Wiring
+### Task 5.3: Add Proxy Route Authentication
+
+Status: TODO
+
+Inputs:
+
+- exact proxy route from Task 5.1;
+- session-bound `tool_call_token`;
+- `InMemoryVoiceSessionStore`.
+
+Outputs:
+
+- browser-facing WebSocket proxy rejects missing, malformed, expired, or wrong-session tokens;
+- tests prove rejected attempts never construct DashScope upstream transport.
+
+Validation:
+
+```bash
+./.venv/bin/python -m pytest tests/test_api_realtime_dashscope_proxy.py tests/test_realtime_session_store.py -v
+```
+
+### Task 5.4: Add Proxy Message Envelope Validation
+
+Status: TODO
+
+Inputs:
+
+- browser-to-proxy message types: audio/control/tool-result;
+- blocked secret keys from event-log safety rules.
+
+Outputs:
+
+- proxy accepts only the allowed message envelope;
+- proxy rejects messages containing provider API keys, Authorization headers, client secrets, SDP, raw tool arguments, or unexpected top-level fields.
+
+Validation:
+
+```bash
+./.venv/bin/python -m pytest tests/test_api_realtime_dashscope_proxy.py tests/test_realtime_contracts.py -v
+```
+
+### Task 5.5: Add Fake Upstream Relay
+
+Status: TODO
+
+Inputs:
+
+- fake DashScope upstream transport;
+- proxy message envelope;
+- DashScope event adapter from Phase 4.
+
+Outputs:
+
+- fake browser WebSocket message can traverse VoiceAgents proxy to fake upstream;
+- fake upstream provider event is normalized and sent back to browser as a safe response;
+- no automated test calls real DashScope.
+
+Validation:
+
+```bash
+./.venv/bin/python -m pytest tests/test_api_realtime_dashscope_proxy.py tests/test_realtime_dashscope_adapter.py -v
+```
+
+### Task 5.6: Add Outbound Transport Dependency Decision
+
+Status: TODO
+
+Inputs:
+
+- fake upstream relay result;
+- DashScope official WebSocket requirements;
+- current project dependencies.
+
+Outputs:
+
+- implementation either adds a named outbound WebSocket client dependency behind the transport interface or documents why the real outbound transport remains manual/deferred;
+- tests still use fake transport and do not require real DashScope credentials.
+
+Validation:
+
+```bash
+./.venv/bin/python -m pytest tests/test_api_realtime_dashscope_proxy.py -v
+git diff --check
+```
+
+### Task 5.7: Add Utilitarian DashScope Test Page Wiring
 
 Status: TODO
 
@@ -580,7 +694,7 @@ Validation:
 ./.venv/bin/python -m pytest tests/test_api_realtime_test_page.py tests/test_realtime_test_page_failure_modes.py -v
 ```
 
-### Task 5.4: Add DashScope Manual Checklist
+### Task 5.8: Add DashScope Manual Checklist
 
 Status: TODO
 
@@ -601,7 +715,7 @@ rg -n "dashscope_realtime|DASHSCOPE_API_KEY|qwen3.5-omni-flash-realtime|server_w
 git diff --check
 ```
 
-### Task 5.5: Run Focused And Full Verification
+### Task 5.9: Run Focused And Full Verification
 
 Status: TODO
 
@@ -626,6 +740,6 @@ git status --short
 Checkpoint:
 
 ```bash
-git add voiceagents/api/app.py voiceagents/api/static/realtime-test.html voiceagents/api/static/realtime-dashscope-adapter.js tests/test_api_realtime_test_page.py tests/test_api_realtime_client_secret.py docs/specs/voiceagents-dashscope-realtime-manual-checklist.md README.md OPENAI_REALTIME_VOICE_MVP_HANDOFF.md
+git add voiceagents/api/app.py voiceagents/api/static/realtime-test.html voiceagents/api/static/realtime-dashscope-adapter.js tests/test_api_realtime_test_page.py tests/test_api_realtime_client_secret.py tests/test_api_realtime_dashscope_proxy.py docs/specs/voiceagents-dashscope-realtime-manual-checklist.md README.md OPENAI_REALTIME_VOICE_MVP_HANDOFF.md
 git commit -m "feat: expose dashscope realtime proxy path"
 ```
