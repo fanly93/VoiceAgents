@@ -52,6 +52,25 @@ def create_dashscope_session_with_transport(transport: object) -> tuple[TestClie
     )
 
 
+def create_dashscope_session_with_transport_factory(factory: object) -> tuple[TestClient, str]:
+    store = InMemoryVoiceSessionStore()
+    created = store.create_session(
+        session_id="session-123",
+        call_id="call-123",
+        merchant_id="merchant-123",
+        provider=RealtimeProviderName.DASHSCOPE_REALTIME,
+    )
+    return (
+        TestClient(
+            create_app(
+                realtime_session_store=store,
+                dashscope_upstream_transport_factory=factory,
+            )
+        ),
+        created.tool_call_token,
+    )
+
+
 def create_dashscope_session_with_transport_and_events(
     transport: object,
     event_repository: InMemoryVoiceEventRepository,
@@ -246,6 +265,31 @@ def test_dashscope_proxy_does_not_touch_upstream_before_auth() -> None:
             pass
 
     assert transport.messages == []
+
+
+def test_dashscope_proxy_builds_upstream_from_factory_after_auth() -> None:
+    transport = FakeDashScopeUpstreamTransport()
+    calls = 0
+
+    def factory() -> FakeDashScopeUpstreamTransport:
+        nonlocal calls
+        calls += 1
+        return transport
+
+    client, token = create_dashscope_session_with_transport_factory(factory)
+
+    assert calls == 0
+    with client.websocket_connect(
+        f"/v1/realtime/dashscope/proxy/session-123?token={token}"
+    ) as websocket:
+        websocket.receive_json()
+        assert calls == 0
+        websocket.send_json({"type": "control", "payload": {"action": "start"}})
+        websocket.receive_json()
+        websocket.receive_json()
+
+    assert calls == 1
+    assert transport.messages == [{"type": "control", "payload": {"action": "start"}}]
 
 
 def test_dashscope_proxy_relays_to_fake_upstream_and_returns_normalized_event() -> None:
