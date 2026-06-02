@@ -2,7 +2,7 @@
 
 Status: DECIDED / DEFERRED
 Date: 2026-06-02
-Branch: `feat/pilot-demo-report-sharing-auth`
+Branch: `docs/phase-two-three-worksplit`
 Related completed phase: local developer/test validation and report viewer
 
 ## Purpose
