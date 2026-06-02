@@ -101,6 +101,7 @@ Realtime API endpoints:
 
 - `POST /v1/realtime/client-secret` creates a local realtime session and returns provider credentials plus a session-bound `tool_call_token`.
 - `POST /v1/realtime/tool-call` relays approved realtime tool calls to the backend. Send the relay token as `Authorization: Bearer <tool_call_token>`.
+- `WS /v1/realtime/dashscope/proxy/{session_id}` is the local browser-facing DashScope realtime proxy route for `server_websocket_proxy` sessions. It must authenticate with the session-bound tool-call token and must never expose `DASHSCOPE_API_KEY` to the browser.
 
 Realtime provider environment variables:
 

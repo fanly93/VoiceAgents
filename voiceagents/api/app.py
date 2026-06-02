@@ -4,7 +4,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 import uuid
 
-from fastapi import Body, FastAPI, Header, HTTPException, Request
+from fastapi import Body, FastAPI, Header, HTTPException, Request, WebSocket
 from fastapi.responses import FileResponse
 from pydantic import ValidationError
 
@@ -406,6 +406,11 @@ def create_app(
             response.safe_summary,
         )
         return response
+
+    @app.websocket("/v1/realtime/dashscope/proxy/{session_id}")
+    async def dashscope_realtime_proxy(websocket: WebSocket, session_id: str) -> None:
+        await websocket.accept()
+        await websocket.close(code=1000, reason=f"DashScope proxy route declared for {session_id}")
 
     return app
 
