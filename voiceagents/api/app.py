@@ -44,6 +44,7 @@ from voiceagents.realtime.providers import (
     MockRealtimeProvider,
     OpenAIRealtimeProvider,
     RealtimeProviderError,
+    build_realtime_provider,
 )
 from voiceagents.realtime.redaction import redact_text
 from voiceagents.realtime.session_store import InMemoryVoiceSessionStore, VoiceSessionNotFound
@@ -492,15 +493,10 @@ def _current_realtime_provider_name() -> RealtimeProviderName:
 def _build_realtime_provider(
     provider_name: RealtimeProviderName,
 ) -> MockRealtimeProvider | OpenAIRealtimeProvider:
-    if provider_name is RealtimeProviderName.MOCK:
-        return MockRealtimeProvider()
-    if provider_name is RealtimeProviderName.OPENAI_REALTIME:
-        return OpenAIRealtimeProvider(
-            api_key=os.getenv("OPENAI_API_KEY"),
-            model=os.getenv("VOICEAGENTS_OPENAI_REALTIME_MODEL", "gpt-realtime-2"),
-            voice=os.getenv("VOICEAGENTS_OPENAI_REALTIME_VOICE", "marin"),
-        )
-    raise HTTPException(status_code=500, detail=f"Unsupported realtime provider: {provider_name}")
+    try:
+        return build_realtime_provider(provider_name, env=os.environ)
+    except RealtimeProviderError as error:
+        raise HTTPException(status_code=500, detail=str(error)) from error
 
 
 def _extract_bearer_token(authorization: str | None) -> str:

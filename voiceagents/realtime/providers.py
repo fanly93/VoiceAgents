@@ -1,4 +1,4 @@
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from datetime import datetime, timezone
 import json
 from typing import Protocol
@@ -137,6 +137,23 @@ class RealtimeProvider(Protocol):
         request: RealtimeClientSecretRequest,
     ) -> RealtimeClientSecretResponse:
         raise NotImplementedError
+
+
+def build_realtime_provider(
+    provider_name: RealtimeProviderName,
+    *,
+    env: Mapping[str, str] | None = None,
+) -> RealtimeProvider:
+    source = env if env is not None else {}
+    if provider_name is RealtimeProviderName.MOCK:
+        return MockRealtimeProvider()
+    if provider_name is RealtimeProviderName.OPENAI_REALTIME:
+        return OpenAIRealtimeProvider(
+            api_key=source.get("OPENAI_API_KEY"),
+            model=source.get("VOICEAGENTS_OPENAI_REALTIME_MODEL", DEFAULT_OPENAI_REALTIME_MODEL),
+            voice=source.get("VOICEAGENTS_OPENAI_REALTIME_VOICE", DEFAULT_OPENAI_REALTIME_VOICE),
+        )
+    raise RealtimeProviderError(f"Unsupported realtime provider: {provider_name.value}")
 
 
 class MockRealtimeProvider:

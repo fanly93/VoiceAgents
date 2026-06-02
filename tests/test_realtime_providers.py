@@ -13,6 +13,7 @@ from voiceagents.realtime.providers import (
     MockRealtimeProvider,
     OpenAIRealtimeProvider,
     RealtimeProviderError,
+    build_realtime_provider,
     get_realtime_provider_capabilities,
     map_realtime_tools_to_openai_tools,
 )
@@ -67,6 +68,24 @@ def test_realtime_provider_capabilities_include_supported_providers() -> None:
     assert capabilities[RealtimeProviderName.DASHSCOPE_REALTIME].default_model == (
         "qwen3.5-omni-flash-realtime"
     )
+
+
+def test_build_realtime_provider_constructs_mock_and_openai_providers() -> None:
+    mock_provider = build_realtime_provider(
+        RealtimeProviderName.MOCK,
+        env={},
+    )
+    openai_provider = build_realtime_provider(
+        RealtimeProviderName.OPENAI_REALTIME,
+        env={
+            "OPENAI_API_KEY": "server-api-key",
+            "VOICEAGENTS_OPENAI_REALTIME_MODEL": "gpt-realtime-custom",
+            "VOICEAGENTS_OPENAI_REALTIME_VOICE": "cedar",
+        },
+    )
+
+    assert isinstance(mock_provider, MockRealtimeProvider)
+    assert isinstance(openai_provider, OpenAIRealtimeProvider)
 
 
 def test_mock_realtime_provider_returns_deterministic_credentials() -> None:
