@@ -81,6 +81,35 @@ def test_realtime_client_secret_endpoint_blocks_real_provider_without_dev_gate(m
         store.get_session("session-123")
 
 
+def test_realtime_client_secret_endpoint_blocks_dashscope_without_dev_gate(monkeypatch) -> None:
+    monkeypatch.setenv("VOICEAGENTS_REALTIME_PROVIDER", "dashscope_realtime")
+    monkeypatch.delenv("VOICEAGENTS_ENABLE_REALTIME_DEV_ENDPOINTS", raising=False)
+    monkeypatch.setenv("VOICEAGENTS_DASHSCOPE_API_KEY", "dashscope-secret")
+    store = InMemoryVoiceSessionStore()
+
+    def fail_if_provider_is_built(provider_name: RealtimeProviderName) -> object:
+        raise AssertionError(f"provider should not be built while gated: {provider_name}")
+
+    monkeypatch.setattr(api_app, "_build_realtime_provider", fail_if_provider_is_built)
+    client = TestClient(create_app(realtime_session_store=store))
+
+    response = client.post(
+        "/v1/realtime/client-secret",
+        json={
+            "session_id": "session-123",
+            "call_id": "call-123",
+            "merchant_id": "merchant-123",
+            "response_mode": "voice",
+            "locale": "zh-CN",
+        },
+    )
+
+    assert response.status_code == 403
+    assert "realtime dev endpoints" in response.json()["detail"]
+    with pytest.raises(VoiceSessionNotFound):
+        store.get_session("session-123")
+
+
 def test_realtime_client_secret_endpoint_rejects_disallowed_real_provider_origin(
     monkeypatch,
 ) -> None:
@@ -229,6 +258,7 @@ def test_realtime_client_secret_endpoint_returns_dashscope_proxy_metadata(
     monkeypatch,
 ) -> None:
     monkeypatch.setenv("VOICEAGENTS_REALTIME_PROVIDER", "dashscope_realtime")
+    monkeypatch.setenv("VOICEAGENTS_ENABLE_REALTIME_DEV_ENDPOINTS", "true")
     monkeypatch.setenv("VOICEAGENTS_DASHSCOPE_API_KEY", "dashscope-secret")
     monkeypatch.setenv("VOICEAGENTS_DASHSCOPE_REALTIME_MODEL", "qwen3.5-omni-flash-realtime")
     store = InMemoryVoiceSessionStore()
@@ -236,6 +266,7 @@ def test_realtime_client_secret_endpoint_returns_dashscope_proxy_metadata(
 
     response = client.post(
         "/v1/realtime/client-secret",
+        headers={"Origin": "http://127.0.0.1:8000"},
         json={
             "session_id": "session-123",
             "call_id": "call-123",

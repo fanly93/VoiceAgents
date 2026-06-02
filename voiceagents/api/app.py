@@ -493,13 +493,13 @@ def _enforce_real_provider_dev_gate(
     request: Request,
     app: FastAPI,
 ) -> None:
-    if provider_name is not RealtimeProviderName.OPENAI_REALTIME:
+    if provider_name is RealtimeProviderName.MOCK:
         return
 
     if os.getenv("VOICEAGENTS_ENABLE_REALTIME_DEV_ENDPOINTS", "false").lower() != "true":
         raise HTTPException(
             status_code=403,
-            detail="OpenAI realtime dev endpoints are disabled",
+            detail="realtime dev endpoints are disabled for real providers",
         )
 
     origin = request.headers.get("origin")

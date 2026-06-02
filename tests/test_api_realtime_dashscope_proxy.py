@@ -80,6 +80,25 @@ def test_dashscope_proxy_rejects_wrong_session_token() -> None:
     assert error.value.code == 1008
 
 
+def test_dashscope_proxy_rejects_non_dashscope_session_token() -> None:
+    store = InMemoryVoiceSessionStore()
+    created = store.create_session(
+        session_id="session-123",
+        call_id="call-123",
+        merchant_id="merchant-123",
+        provider=RealtimeProviderName.OPENAI_REALTIME,
+    )
+    client = TestClient(create_app(realtime_session_store=store))
+
+    with pytest.raises(WebSocketDisconnect) as error:
+        with client.websocket_connect(
+            f"/v1/realtime/dashscope/proxy/session-123?token={created.tool_call_token}"
+        ):
+            pass
+
+    assert error.value.code == 1008
+
+
 def test_dashscope_proxy_accepts_valid_session_token() -> None:
     client, token = create_dashscope_session()
 

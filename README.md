@@ -107,12 +107,12 @@ DashScope outbound transport dependency decision: automated tests use only a fak
 
 Realtime provider environment variables:
 
-- `VOICEAGENTS_REALTIME_PROVIDER=mock|openai_realtime` selects the mock-safe local provider or the OpenAI Realtime provider. Mock mode is the default for development and automated tests.
-- `OPENAI_API_KEY` is required only for `openai_realtime`. It is server-only and must never be exposed to the browser, DOM, logs, tickets, screenshots, or committed files.
+- `VOICEAGENTS_REALTIME_PROVIDER=mock|openai_realtime|dashscope_realtime` selects the mock-safe local provider, OpenAI Realtime, or DashScope Realtime. Mock mode is the default for development and automated tests.
+- `OPENAI_API_KEY` is required only for `openai_realtime`. `VOICEAGENTS_DASHSCOPE_API_KEY` is required only for `dashscope_realtime`. Provider keys are server-only and must never be exposed to the browser, DOM, logs, tickets, screenshots, or committed files.
 - `VOICEAGENTS_OPENAI_REALTIME_MODEL` defaults to `gpt-realtime-2`.
 - `VOICEAGENTS_OPENAI_REALTIME_VOICE` defaults to `marin`.
 - `VOICEAGENTS_TRANSCRIPT_LOGGING=off|structured|transcript` controls transcript text logging. When unset, it defaults to `structured`; use `transcript` only when local development explicitly needs verbatim transcript text.
-- `VOICEAGENTS_ENABLE_REALTIME_DEV_ENDPOINTS=false|true` gates the real provider client-secret endpoint. It defaults to `false`; set it to `true` only for local OpenAI Realtime development.
+- `VOICEAGENTS_ENABLE_REALTIME_DEV_ENDPOINTS=false|true` gates the real provider client-secret endpoint. It defaults to `false`; set it to `true` only for local real-provider development.
 
 OpenAI realtime provider mode can be run locally with:
 

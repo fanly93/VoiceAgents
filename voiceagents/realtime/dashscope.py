@@ -298,12 +298,3 @@ def _string_field(payload: Mapping[str, object], name: str) -> str:
     if not isinstance(value, str) or not value:
         raise DashScopeEventError(f"DashScope event missing {name}")
     return value
-
-
-def _optional_string_field(payload: Mapping[str, object], name: str) -> str | None:
-    value = payload.get(name)
-    if value is None:
-        return None
-    if not isinstance(value, str) or not value:
-        raise DashScopeEventError(f"DashScope event has invalid {name}")
-    return value
