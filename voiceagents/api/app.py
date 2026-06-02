@@ -409,8 +409,27 @@ def create_app(
 
     @app.websocket("/v1/realtime/dashscope/proxy/{session_id}")
     async def dashscope_realtime_proxy(websocket: WebSocket, session_id: str) -> None:
+        token = websocket.query_params.get("token")
+        if token is None:
+            await websocket.close(code=1008, reason="Missing DashScope proxy token")
+            return
+        try:
+            provider_name = session_store.get_session_provider(session_id)
+            token_is_valid = session_store.verify_tool_call_token(session_id, token)
+        except VoiceSessionNotFound:
+            await websocket.close(code=1008, reason="Invalid DashScope proxy session")
+            return
+        if provider_name is not RealtimeProviderName.DASHSCOPE_REALTIME or not token_is_valid:
+            await websocket.close(code=1008, reason="Invalid DashScope proxy token")
+            return
+
         await websocket.accept()
-        await websocket.close(code=1000, reason=f"DashScope proxy route declared for {session_id}")
+        await websocket.send_json(
+            {
+                "type": "dashscope.proxy.ready",
+                "session_id": session_id,
+            }
+        )
 
     return app
 
