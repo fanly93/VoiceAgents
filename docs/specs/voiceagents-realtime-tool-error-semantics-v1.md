@@ -1,6 +1,6 @@
 # VoiceAgents Realtime Tool Error Semantics v1 Spec
 
-Status: DRAFT / IN PROGRESS
+Status: IMPLEMENTED / READY FOR REVIEW
 Date: 2026-06-02
 Branch: `feat/realtime-tool-error-semantics`
 
@@ -53,12 +53,12 @@ For successful tool calls:
 For tool calls that return a safe business/tool failure from an adapter:
 
 - `ok=false`
-- `tool_status=failed` unless handoff is required
+- `tool_status=failed`
 - `safe_summary` remains a user-safe sentence
 - `error_code` is set
 - `error_message` is safe and does not include raw arguments
 
-For handoff tool calls:
+For explicit handoff outcomes such as low-confidence product knowledge and `handoff_to_human`:
 
 - `tool_status=handoff_required`
 - `handoff_required=true`
@@ -118,3 +118,22 @@ Do not include raw arguments, Authorization headers, tool tokens, API keys, SDP,
 8. Tool-call event logs persist the response `tool_status`, not always `completed`.
 9. Focused tests and full test suite pass.
 
+## Implementation Notes
+
+Implemented on `feat/realtime-tool-error-semantics`.
+
+Added:
+
+- `RealtimeToolStatus`
+- `RealtimeToolCallResponse.tool_status`
+- `RealtimeToolCallResponse.error_message`
+- safe adapter exception conversion to `system_error`
+- structured HTTP details for unknown tool, invalid arguments, and invalid token/session binding
+- tool-call event logging that persists response `tool_status`
+- `/realtime-test` relay guard that does not send failed tool responses back to the provider
+
+Focused validation:
+
+```bash
+./.venv/bin/python -m pytest tests/test_realtime_contracts.py tests/test_realtime_tool_router.py tests/test_api_realtime_tool_call.py tests/test_api_realtime_test_page.py tests/test_realtime_test_page_failure_modes.py -v
+```

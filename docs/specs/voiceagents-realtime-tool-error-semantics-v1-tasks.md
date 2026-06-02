@@ -1,6 +1,6 @@
 # VoiceAgents Realtime Tool Error Semantics v1 Tasks
 
-Status: DRAFT / IN PROGRESS
+Status: IMPLEMENTED / READY FOR REVIEW
 Source spec: `docs/specs/voiceagents-realtime-tool-error-semantics-v1.md`
 Branch: `feat/realtime-tool-error-semantics`
 
@@ -14,6 +14,8 @@ Rules:
 - Do not implement new providers in this branch.
 
 ## Phase 1: Tool Response Contract
+
+Status: DONE
 
 Goal: add explicit safe tool-call status semantics.
 
@@ -39,6 +41,8 @@ git commit -m "feat: add realtime tool status semantics"
 
 ## Phase 2: API Error Details And Event Logging
 
+Status: DONE
+
 Goal: return structured safe request-level errors and log response tool status.
 
 Primary files:
@@ -60,6 +64,8 @@ git commit -m "feat: structure realtime tool-call errors"
 ```
 
 ## Phase 3: Frontend Relay Compatibility And Docs
+
+Status: DONE
 
 Goal: keep `/realtime-test` provider relay compatible with new tool response semantics and update handoff docs.
 
@@ -85,4 +91,3 @@ Checkpoint:
 git add voiceagents/api/static/realtime-test.html tests/test_api_realtime_test_page.py README.md OPENAI_REALTIME_VOICE_MVP_HANDOFF.md docs/specs/voiceagents-realtime-tool-error-semantics-v1.md docs/specs/voiceagents-realtime-tool-error-semantics-v1-tasks.md
 git commit -m "docs: document realtime tool error semantics"
 ```
-

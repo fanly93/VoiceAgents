@@ -136,6 +136,14 @@ Run the realtime smoke test against a running mock-mode server:
 
 The realtime smoke script is intentionally mock-mode only. It validates `/health`, client-secret minting, the four approved tool calls, unknown tool rejection, and missing authorization rejection without requiring `OPENAI_API_KEY`. Real OpenAI voice verification is manual; use `docs/specs/voiceagents-openai-realtime-voice-mvp-manual-checklist.md` for the 3 minute `/realtime-test` run and browser failure-mode checks.
 
+Realtime tool-call responses include safe status semantics:
+
+- `tool_status=completed` for successful backend tool results.
+- `tool_status=failed` for safe backend tool failures such as missing order/logistics data or system errors.
+- `tool_status=handoff_required` when a handoff path is the intended outcome.
+
+Request-level tool-call errors return structured safe details for unknown tools, invalid arguments, and invalid token/session binding. These responses never include raw arguments, tool tokens, Authorization headers, provider secrets, SDP, raw audio, or real PII.
+
 Run realtime development diagnostics against a running local server before a real voice test:
 
 ```bash
