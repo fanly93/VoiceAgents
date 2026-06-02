@@ -2,10 +2,13 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 
 from voiceagents.realtime.contracts import (
+    NormalizedRealtimeEventType,
     RealtimeClientSecretRequest,
     RealtimeClientSecretResponse,
     RealtimeConnectionMode,
+    RealtimeEventIngestRequest,
     RealtimeProviderName,
+    VoiceSessionState,
     build_default_realtime_session_config,
 )
 
@@ -16,6 +19,10 @@ DASHSCOPE_PROXY_ROUTE_TEMPLATE = "/v1/realtime/dashscope/proxy/{session_id}"
 
 
 class RealtimeProviderError(RuntimeError):
+    pass
+
+
+class DashScopeEventError(ValueError):
     pass
 
 
@@ -93,3 +100,82 @@ class DashScopeRealtimeProvider:
             voice=self._config.voice,
             session_config=build_default_realtime_session_config(),
         )
+
+
+def normalize_dashscope_event(
+    payload: Mapping[str, object],
+    *,
+    session_id: str,
+    call_id: str,
+    merchant_id: str,
+) -> RealtimeEventIngestRequest:
+    provider_event_type = _string_field(payload, "type")
+    if provider_event_type == "dashscope.session.started":
+        return _build_event(
+            session_id=session_id,
+            call_id=call_id,
+            merchant_id=merchant_id,
+            event_type=NormalizedRealtimeEventType.SESSION_CONNECTED,
+            state=VoiceSessionState.LISTENING,
+            provider_event_type=provider_event_type,
+            provider_call_id=None,
+        )
+    if provider_event_type == "dashscope.session.finished":
+        return _build_event(
+            session_id=session_id,
+            call_id=call_id,
+            merchant_id=merchant_id,
+            event_type=NormalizedRealtimeEventType.SESSION_ENDED,
+            state=VoiceSessionState.ENDED,
+            provider_event_type=provider_event_type,
+            provider_call_id=None,
+        )
+    if provider_event_type == "dashscope.session.error":
+        return _build_event(
+            session_id=session_id,
+            call_id=call_id,
+            merchant_id=merchant_id,
+            event_type=NormalizedRealtimeEventType.SESSION_ERROR,
+            state=VoiceSessionState.ERROR,
+            provider_event_type=provider_event_type,
+            provider_call_id=None,
+        )
+    raise DashScopeEventError(f"Unsupported DashScope event: {provider_event_type}")
+
+
+def _build_event(
+    *,
+    session_id: str,
+    call_id: str,
+    merchant_id: str,
+    event_type: NormalizedRealtimeEventType,
+    state: VoiceSessionState,
+    provider_event_type: str,
+    provider_call_id: str | None,
+) -> RealtimeEventIngestRequest:
+    return RealtimeEventIngestRequest(
+        session_id=session_id,
+        call_id=call_id,
+        merchant_id=merchant_id,
+        provider=RealtimeProviderName.DASHSCOPE_REALTIME,
+        event_type=event_type,
+        state=state,
+        provider_event_type=provider_event_type,
+        provider_call_id=provider_call_id,
+    )
+
+
+def _string_field(payload: Mapping[str, object], name: str) -> str:
+    value = payload.get(name)
+    if not isinstance(value, str) or not value:
+        raise DashScopeEventError(f"DashScope event missing {name}")
+    return value
+
+
+def _optional_string_field(payload: Mapping[str, object], name: str) -> str | None:
+    value = payload.get(name)
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value:
+        raise DashScopeEventError(f"DashScope event has invalid {name}")
+    return value
