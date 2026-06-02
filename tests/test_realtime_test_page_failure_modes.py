@@ -8,6 +8,23 @@ import pytest
 STATIC_PAGE = Path("voiceagents/api/static/realtime-test.html")
 
 
+def test_realtime_test_page_dashscope_proxy_flow_is_server_persisted() -> None:
+    html = STATIC_PAGE.read_text(encoding="utf-8")
+
+    assert 'src="/static/realtime-dashscope-adapter.js"' in html
+    assert "voiceAgentsDashScopeRealtimeAdapter" in html
+    assert "adapter.connectDashScopeRealtime" in html
+    dashscope_block = html.split("async function connectDashScopeRealtime", 1)[1].split(
+        "async function startSession",
+        1,
+    )[0]
+    assert "dashscope.proxy.event" in dashscope_block
+    assert "dashscope.proxy.tool_result" in dashscope_block
+    assert "renderNormalizedEvent(payload.event)" in dashscope_block
+    assert "relayNormalizedEvent(payload.event)" not in dashscope_block
+    assert "sendDashScopeAudio" in html
+
+
 @pytest.mark.skipif(shutil.which("node") is None, reason="node is required for browser JS harness")
 def test_realtime_test_page_failure_modes_and_reconnect_are_clean() -> None:
     script = r"""
