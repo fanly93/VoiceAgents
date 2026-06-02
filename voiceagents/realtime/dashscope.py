@@ -54,6 +54,8 @@ DASHSCOPE_TRANSCRIPT_EVENT_MAP = {
 }
 ALLOWED_DASHSCOPE_PROXY_MESSAGE_TYPES = {"audio", "control", "tool_result"}
 ALLOWED_DASHSCOPE_PROXY_MESSAGE_KEYS = {"type", "payload"}
+DASHSCOPE_OUTPUT_AUDIO_FORMAT = "pcm24"
+DASHSCOPE_UNSUPPORTED_TOOL_SCHEMA_KEYS = {"additionalProperties", "minLength"}
 BLOCKED_DASHSCOPE_PROXY_KEYS = {
     "api_key",
     "authorization",
@@ -188,12 +190,14 @@ class DashScopeRealtimeAdapter:
         *,
         response_mode: ResponseMode = ResponseMode.VOICE,
     ) -> Mapping[str, object]:
-        modalities = ["text"] if response_mode is ResponseMode.TEXT else ["audio", "text"]
+        modalities = ["text"] if response_mode is ResponseMode.TEXT else ["text", "audio"]
         session: dict[str, object] = {
             "modalities": modalities,
             "instructions": session_config.instructions,
             "input_audio_format": "pcm16",
-            "output_audio_format": None if response_mode is ResponseMode.TEXT else "pcm16",
+            "output_audio_format": None
+            if response_mode is ResponseMode.TEXT
+            else DASHSCOPE_OUTPUT_AUDIO_FORMAT,
             "turn_detection": {"type": "server_vad"},
             "tools": _map_dashscope_tools(session_config.tools),
         }
@@ -380,10 +384,29 @@ def _map_dashscope_tools(tools: list[RealtimeToolDefinition]) -> list[dict[str, 
                 "type": "function",
                 "name": tool.name,
                 "description": tool.description,
-                "parameters": tool.parameters_schema,
+                "parameters": _sanitize_dashscope_tool_schema(tool.parameters_schema),
             }
         )
     return mapped_tools
+
+
+def _sanitize_dashscope_tool_schema(value: object) -> object:
+    if isinstance(value, dict):
+        sanitized: dict[str, object] = {}
+        for key, child in value.items():
+            if key in DASHSCOPE_UNSUPPORTED_TOOL_SCHEMA_KEYS:
+                continue
+            if key == "type" and isinstance(child, list):
+                supported_types = [
+                    item for item in child if isinstance(item, str) and item != "null"
+                ]
+                sanitized[key] = supported_types[0] if supported_types else "string"
+                continue
+            sanitized[key] = _sanitize_dashscope_tool_schema(child)
+        return sanitized
+    if isinstance(value, list):
+        return [_sanitize_dashscope_tool_schema(item) for item in value]
+    return value
 
 
 def normalize_dashscope_tool_call(

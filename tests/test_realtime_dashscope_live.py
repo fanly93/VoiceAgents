@@ -7,11 +7,14 @@ import pytest
 from voiceagents.realtime.contracts import build_default_realtime_session_config
 from voiceagents.realtime.dashscope import DashScopeRealtimeAdapter, DashScopeRealtimeConfig
 from voiceagents.realtime.dashscope_transport import DashScopeRealtimeTransport
+from voiceagents.realtime.outbound import RealtimeOutboundEvent
 from voiceagents.realtime.outbound import RealtimeOutboundEventKind
 
 
 ENV_PATH = Path(__file__).resolve().parents[1] / ".env"
 LIVE_TEST_FLAG = "VOICEAGENTS_RUN_DASHSCOPE_LIVE_TESTS"
+DASHSCOPE_ERROR_EVENT_TYPES = {"dashscope.session.error", "error"}
+DASHSCOPE_SESSION_UPDATE_ACK_TYPES = {"session.updated"}
 
 
 def _load_dotenv_without_overriding() -> dict[str, str]:
@@ -46,6 +49,27 @@ def _dashscope_live_config() -> DashScopeRealtimeConfig:
     return DashScopeRealtimeConfig.from_env(source)
 
 
+async def _receive_session_update_ack(transport: DashScopeRealtimeTransport) -> RealtimeOutboundEvent:
+    seen_event_types: list[str] = []
+    deadline = asyncio.get_running_loop().time() + 30
+    while asyncio.get_running_loop().time() < deadline:
+        event = await asyncio.wait_for(transport.receive(), timeout=10)
+        if event.kind is not RealtimeOutboundEventKind.JSON or event.payload is None:
+            continue
+        event_type = event.payload.get("type")
+        if not isinstance(event_type, str):
+            continue
+        seen_event_types.append(event_type)
+        if event_type in DASHSCOPE_ERROR_EVENT_TYPES:
+            pytest.fail(f"DashScope live session update returned error event: {event_type}")
+        if event_type in DASHSCOPE_SESSION_UPDATE_ACK_TYPES:
+            return event
+    pytest.fail(
+        "DashScope live session update was not acknowledged; "
+        f"seen provider event types: {seen_event_types}"
+    )
+
+
 @pytest.mark.anyio
 async def test_dashscope_realtime_transport_connects_to_live_model() -> None:
     config = _dashscope_live_config()
@@ -60,7 +84,7 @@ async def test_dashscope_realtime_transport_connects_to_live_model() -> None:
             ),
             timeout=20,
         )
-        event = await asyncio.wait_for(transport.receive(), timeout=30)
+        event = await _receive_session_update_ack(transport)
     finally:
         await transport.close()
 

@@ -130,11 +130,11 @@ def test_dashscope_adapter_builds_session_update_for_voice_mode() -> None:
 
     session = message["session"]
     assert message["type"] == "session.update"
-    assert session["modalities"] == ["audio", "text"]
+    assert session["modalities"] == ["text", "audio"]
     assert session["voice"] == "Chelsie"
     assert session["instructions"].startswith("You are a VoiceAgents support assistant")
     assert session["input_audio_format"] == "pcm16"
-    assert session["output_audio_format"] == "pcm16"
+    assert session["output_audio_format"] == "pcm24"
     assert session["turn_detection"] == {"type": "server_vad"}
     assert "tool_choice" not in session
     assert "parallel_tool_calls" not in session
@@ -186,6 +186,9 @@ def test_dashscope_adapter_maps_allowed_tools_to_function_declarations() -> None
     assert all(tool["type"] == "function" for tool in tools)
     assert tools[0]["description"] == "Look up safe order status fields for a confirmed order ID."
     assert tools[0]["parameters"]["properties"]["order_id"]["type"] == "string"
+    assert "additionalProperties" not in tools[0]["parameters"]
+    assert "minLength" not in tools[0]["parameters"]["properties"]["order_id"]
+    assert tools[2]["parameters"]["properties"]["locale"]["type"] == "string"
 
 
 def test_dashscope_adapter_maps_browser_control_start_to_session_update() -> None:
