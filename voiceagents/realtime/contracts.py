@@ -27,6 +27,21 @@ class ResponseMode(StrEnum):
 class RealtimeProviderName(StrEnum):
     MOCK = "mock"
     OPENAI_REALTIME = "openai_realtime"
+    DASHSCOPE_REALTIME = "dashscope_realtime"
+
+
+class RealtimeConnectionMode(StrEnum):
+    BROWSER_WEBRTC_EPHEMERAL = "browser_webrtc_ephemeral"
+    SERVER_WEBSOCKET_PROXY = "server_websocket_proxy"
+    SERVER_SDK_PROXY = "server_sdk_proxy"
+    CASCADED_PIPELINE = "cascaded_pipeline"
+
+
+class RealtimeProviderMode(StrEnum):
+    NATIVE_REALTIME = "native_realtime"
+    ASR = "asr"
+    TTS = "tts"
+    CASCADED = "cascaded"
 
 
 class NormalizedRealtimeEventType(StrEnum):
@@ -93,6 +108,20 @@ class RealtimeSessionConfig(BaseModel):
     tools: list[RealtimeToolDefinition]
 
 
+class RealtimeProviderCapability(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    provider: RealtimeProviderName
+    supported_provider_modes: list[RealtimeProviderMode]
+    supported_connection_modes: list[RealtimeConnectionMode]
+    supported_response_modes: list[ResponseMode]
+    supports_native_tool_calls: bool
+    server_side_credentials_required: bool
+    default_model: str = Field(min_length=1)
+    default_voice: str | None
+    diagnostics_checks: list[str]
+
+
 class RealtimeClientSecretRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -124,7 +153,10 @@ class RealtimeClientSecretResponse(BaseModel):
     client_secret: str | None
     tool_call_token: str = Field(min_length=1)
     connection_url: str | None
+    connection_mode: RealtimeConnectionMode
+    ephemeral_credential: str | None
     expires_at: str | None
+    credential_expires_at: str | None
     model: str = Field(min_length=1)
     voice: str | None
     session_config: RealtimeSessionConfig

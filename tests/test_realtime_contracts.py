@@ -5,8 +5,11 @@ from voiceagents.realtime.contracts import (
     NormalizedRealtimeEventType,
     RealtimeClientSecretRequest,
     RealtimeClientSecretResponse,
+    RealtimeConnectionMode,
     RealtimeEventIngestRequest,
     RealtimeEventIngestResponse,
+    RealtimeProviderCapability,
+    RealtimeProviderMode,
     RealtimeProviderName,
     RealtimeSessionConfig,
     RealtimeTranscriptEvent,
@@ -43,6 +46,77 @@ def test_response_modes_match_spec() -> None:
 def test_realtime_provider_names_match_spec() -> None:
     assert RealtimeProviderName.MOCK == "mock"
     assert RealtimeProviderName.OPENAI_REALTIME == "openai_realtime"
+    assert RealtimeProviderName.DASHSCOPE_REALTIME == "dashscope_realtime"
+
+
+def test_realtime_connection_modes_match_spec() -> None:
+    assert RealtimeConnectionMode.BROWSER_WEBRTC_EPHEMERAL == "browser_webrtc_ephemeral"
+    assert RealtimeConnectionMode.SERVER_WEBSOCKET_PROXY == "server_websocket_proxy"
+    assert RealtimeConnectionMode.SERVER_SDK_PROXY == "server_sdk_proxy"
+    assert RealtimeConnectionMode.CASCADED_PIPELINE == "cascaded_pipeline"
+    try:
+        RealtimeConnectionMode("browser_api_key")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("unknown realtime connection mode should fail")
+
+
+def test_realtime_provider_capability_rejects_extra_and_models_defaults() -> None:
+    capability = RealtimeProviderCapability(
+        provider=RealtimeProviderName.DASHSCOPE_REALTIME,
+        supported_provider_modes=[RealtimeProviderMode.NATIVE_REALTIME],
+        supported_connection_modes=[RealtimeConnectionMode.SERVER_WEBSOCKET_PROXY],
+        supported_response_modes=[ResponseMode.VOICE],
+        supports_native_tool_calls=True,
+        server_side_credentials_required=True,
+        default_model="qwen3.5-omni-flash-realtime",
+        default_voice=None,
+        diagnostics_checks=["dashscope_api_key", "dashscope_model"],
+    )
+
+    assert capability.provider is RealtimeProviderName.DASHSCOPE_REALTIME
+    assert capability.supported_provider_modes == [RealtimeProviderMode.NATIVE_REALTIME]
+    assert capability.supported_connection_modes == [
+        RealtimeConnectionMode.SERVER_WEBSOCKET_PROXY
+    ]
+    assert capability.supported_response_modes == [ResponseMode.VOICE]
+    assert capability.supports_native_tool_calls is True
+    assert capability.server_side_credentials_required is True
+    assert capability.default_model == "qwen3.5-omni-flash-realtime"
+    assert capability.default_voice is None
+    assert capability.diagnostics_checks == ["dashscope_api_key", "dashscope_model"]
+
+    try:
+        RealtimeProviderCapability(
+            provider=RealtimeProviderName.DASHSCOPE_REALTIME,
+            supported_provider_modes=["native_realtime"],
+            supported_connection_modes=["server_websocket_proxy"],
+            supported_response_modes=["voice"],
+            supports_native_tool_calls=True,
+            server_side_credentials_required=True,
+            default_model="qwen3.5-omni-flash-realtime",
+            default_voice=None,
+            diagnostics_checks=[],
+            browser_api_key="should-not-exist",
+        )
+    except ValueError as error:
+        assert "browser_api_key" in str(error)
+    else:
+        raise AssertionError("provider capability must reject extra fields")
+
+
+def test_realtime_provider_modes_match_spec() -> None:
+    assert RealtimeProviderMode.NATIVE_REALTIME == "native_realtime"
+    assert RealtimeProviderMode.ASR == "asr"
+    assert RealtimeProviderMode.TTS == "tts"
+    assert RealtimeProviderMode.CASCADED == "cascaded"
+    try:
+        RealtimeProviderMode("browser_direct_key")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("unknown realtime provider mode should fail")
 
 
 def test_normalized_realtime_event_types_match_spec() -> None:
@@ -312,7 +386,10 @@ def test_client_secret_response_contains_session_config_and_relay_token() -> Non
         client_secret="mock-client-secret",
         tool_call_token="mock-tool-token",
         connection_url="https://example.invalid/realtime",
+        connection_mode=RealtimeConnectionMode.SERVER_WEBSOCKET_PROXY,
+        ephemeral_credential=None,
         expires_at="2026-05-29T09:00:00Z",
+        credential_expires_at=None,
         model="mock-realtime",
         voice="alloy",
         session_config=RealtimeSessionConfig(
@@ -332,7 +409,55 @@ def test_client_secret_response_contains_session_config_and_relay_token() -> Non
     )
 
     assert response.tool_call_token == "mock-tool-token"
+    assert response.connection_mode is RealtimeConnectionMode.SERVER_WEBSOCKET_PROXY
+    assert response.ephemeral_credential is None
     assert response.session_config.tools[0].name == "lookup_order"
+
+
+def test_client_secret_response_allows_openai_browser_safe_ephemeral_metadata() -> None:
+    response = RealtimeClientSecretResponse(
+        provider=RealtimeProviderName.OPENAI_REALTIME,
+        session_id="session-123",
+        call_id="call-123",
+        client_secret="openai-ephemeral-secret",
+        tool_call_token="voiceagents-local-token",
+        connection_url="https://api.openai.com/v1/realtime/calls",
+        connection_mode=RealtimeConnectionMode.BROWSER_WEBRTC_EPHEMERAL,
+        ephemeral_credential="openai-ephemeral-secret",
+        expires_at="2026-05-30T00:10:00Z",
+        credential_expires_at="2026-05-30T00:10:00Z",
+        model="gpt-realtime-2",
+        voice="marin",
+        session_config=build_default_realtime_session_config(),
+    )
+
+    assert response.provider is RealtimeProviderName.OPENAI_REALTIME
+    assert response.connection_mode is RealtimeConnectionMode.BROWSER_WEBRTC_EPHEMERAL
+    assert response.ephemeral_credential == "openai-ephemeral-secret"
+    assert response.credential_expires_at == "2026-05-30T00:10:00Z"
+
+
+def test_client_secret_response_allows_dashscope_proxy_without_provider_secret() -> None:
+    response = RealtimeClientSecretResponse(
+        provider=RealtimeProviderName.DASHSCOPE_REALTIME,
+        session_id="session-123",
+        call_id="call-123",
+        client_secret=None,
+        tool_call_token="voiceagents-local-token",
+        connection_url="/v1/realtime/proxy/session-123",
+        connection_mode=RealtimeConnectionMode.SERVER_WEBSOCKET_PROXY,
+        ephemeral_credential=None,
+        expires_at=None,
+        credential_expires_at=None,
+        model="qwen3.5-omni-flash-realtime",
+        voice=None,
+        session_config=build_default_realtime_session_config(),
+    )
+
+    assert response.connection_mode is RealtimeConnectionMode.SERVER_WEBSOCKET_PROXY
+    assert response.client_secret is None
+    assert response.ephemeral_credential is None
+    assert "DASHSCOPE_API_KEY" not in response.model_dump_json()
 
 
 def test_tool_call_request_contains_no_body_token() -> None:

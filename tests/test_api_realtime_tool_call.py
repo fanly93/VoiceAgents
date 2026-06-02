@@ -186,7 +186,9 @@ def test_realtime_tool_call_endpoint_rejects_session_binding_mismatch(monkeypatc
         assert response.status_code == 403
 
 
-def test_realtime_tool_call_endpoint_rejects_provider_binding_mismatch(monkeypatch) -> None:
+def test_realtime_tool_call_endpoint_routes_with_session_provider_when_env_changes(
+    monkeypatch,
+) -> None:
     monkeypatch.setenv("VOICEAGENTS_REALTIME_PROVIDER", "mock")
     store = InMemoryVoiceSessionStore()
     created = store.create_session(
@@ -195,7 +197,13 @@ def test_realtime_tool_call_endpoint_rejects_provider_binding_mismatch(monkeypat
         merchant_id="merchant-123",
         provider=RealtimeProviderName.OPENAI_REALTIME,
     )
-    client = TestClient(create_app(realtime_session_store=store))
+    event_repository = InMemoryVoiceEventRepository()
+    client = TestClient(
+        create_app(
+            realtime_session_store=store,
+            realtime_event_repository=event_repository,
+        )
+    )
 
     response = client.post(
         "/v1/realtime/tool-call",
@@ -209,7 +217,9 @@ def test_realtime_tool_call_endpoint_rejects_provider_binding_mismatch(monkeypat
         },
     )
 
-    assert response.status_code == 403
+    assert response.status_code == 200
+    assert response.json()["ok"] is True
+    assert event_repository.events[-1].provider is RealtimeProviderName.OPENAI_REALTIME
 
 
 def test_realtime_tool_call_endpoint_rejects_unknown_tool(monkeypatch) -> None:

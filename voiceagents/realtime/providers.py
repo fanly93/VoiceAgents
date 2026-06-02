@@ -1,12 +1,22 @@
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from datetime import datetime, timezone
 import json
 from typing import Protocol
 from urllib import error, request as urllib_request
 
+from voiceagents.realtime.dashscope import (
+    DEFAULT_DASHSCOPE_BASE_URL,
+    DEFAULT_DASHSCOPE_REALTIME_MODEL,
+    DashScopeRealtimeConfig,
+    DashScopeRealtimeProvider,
+    RealtimeProviderError,
+)
 from voiceagents.realtime.contracts import (
     RealtimeClientSecretRequest,
     RealtimeClientSecretResponse,
+    RealtimeConnectionMode,
+    RealtimeProviderCapability,
+    RealtimeProviderMode,
     RealtimeProviderName,
     RealtimeSessionConfig,
     RealtimeToolDefinition,
@@ -23,8 +33,52 @@ DEFAULT_OPENAI_INPUT_TRANSCRIPTION_MODEL = "gpt-4o-mini-transcribe"
 DEFAULT_OPENAI_CLIENT_SECRET_TTL_SECONDS = 600
 
 
-class RealtimeProviderError(RuntimeError):
-    pass
+def get_realtime_provider_capabilities() -> dict[RealtimeProviderName, RealtimeProviderCapability]:
+    return {
+        RealtimeProviderName.MOCK: RealtimeProviderCapability(
+            provider=RealtimeProviderName.MOCK,
+            supported_provider_modes=[RealtimeProviderMode.NATIVE_REALTIME],
+            supported_connection_modes=[RealtimeConnectionMode.SERVER_WEBSOCKET_PROXY],
+            supported_response_modes=[ResponseMode.TEXT, ResponseMode.VOICE],
+            supports_native_tool_calls=True,
+            server_side_credentials_required=False,
+            default_model="mock-realtime",
+            default_voice="mock-voice",
+            diagnostics_checks=["provider_supported"],
+        ),
+        RealtimeProviderName.OPENAI_REALTIME: RealtimeProviderCapability(
+            provider=RealtimeProviderName.OPENAI_REALTIME,
+            supported_provider_modes=[RealtimeProviderMode.NATIVE_REALTIME],
+            supported_connection_modes=[RealtimeConnectionMode.BROWSER_WEBRTC_EPHEMERAL],
+            supported_response_modes=[ResponseMode.TEXT, ResponseMode.VOICE],
+            supports_native_tool_calls=True,
+            server_side_credentials_required=True,
+            default_model=DEFAULT_OPENAI_REALTIME_MODEL,
+            default_voice=DEFAULT_OPENAI_REALTIME_VOICE,
+            diagnostics_checks=[
+                "openai_dev_gate",
+                "openai_api_key",
+                "openai_model",
+                "openai_voice",
+            ],
+        ),
+        RealtimeProviderName.DASHSCOPE_REALTIME: RealtimeProviderCapability(
+            provider=RealtimeProviderName.DASHSCOPE_REALTIME,
+            supported_provider_modes=[RealtimeProviderMode.NATIVE_REALTIME],
+            supported_connection_modes=[RealtimeConnectionMode.SERVER_WEBSOCKET_PROXY],
+            supported_response_modes=[ResponseMode.VOICE],
+            supports_native_tool_calls=True,
+            server_side_credentials_required=True,
+            default_model=DEFAULT_DASHSCOPE_REALTIME_MODEL,
+            default_voice=None,
+            diagnostics_checks=[
+                "dashscope_api_key",
+                "dashscope_model",
+                "dashscope_base_url",
+                "dashscope_connection_mode",
+            ],
+        ),
+    }
 
 
 class OpenAIJsonTransport(Protocol):
@@ -87,6 +141,25 @@ class RealtimeProvider(Protocol):
         raise NotImplementedError
 
 
+def build_realtime_provider(
+    provider_name: RealtimeProviderName,
+    *,
+    env: Mapping[str, str] | None = None,
+) -> RealtimeProvider:
+    source = env if env is not None else {}
+    if provider_name is RealtimeProviderName.MOCK:
+        return MockRealtimeProvider()
+    if provider_name is RealtimeProviderName.OPENAI_REALTIME:
+        return OpenAIRealtimeProvider(
+            api_key=source.get("OPENAI_API_KEY"),
+            model=source.get("VOICEAGENTS_OPENAI_REALTIME_MODEL", DEFAULT_OPENAI_REALTIME_MODEL),
+            voice=source.get("VOICEAGENTS_OPENAI_REALTIME_VOICE", DEFAULT_OPENAI_REALTIME_VOICE),
+        )
+    if provider_name is RealtimeProviderName.DASHSCOPE_REALTIME:
+        return DashScopeRealtimeProvider(DashScopeRealtimeConfig.from_env(source))
+    raise RealtimeProviderError(f"Unsupported realtime provider: {provider_name.value}")
+
+
 class MockRealtimeProvider:
     def create_client_secret(
         self,
@@ -99,7 +172,10 @@ class MockRealtimeProvider:
             client_secret=f"mock-client-secret-{request.session_id}",
             tool_call_token=f"mock-tool-call-token-{request.session_id}",
             connection_url="https://example.invalid/realtime/mock",
+            connection_mode=RealtimeConnectionMode.SERVER_WEBSOCKET_PROXY,
+            ephemeral_credential=None,
             expires_at=None,
+            credential_expires_at=None,
             model="mock-realtime",
             voice="mock-voice" if request.response_mode == "voice" else None,
             session_config=build_default_realtime_session_config(),
@@ -141,7 +217,10 @@ class OpenAIRealtimeProvider:
             client_secret=client_secret,
             tool_call_token="provider-credentials-only",
             connection_url=OPENAI_REALTIME_CALLS_URL,
+            connection_mode=RealtimeConnectionMode.BROWSER_WEBRTC_EPHEMERAL,
+            ephemeral_credential=client_secret,
             expires_at=expires_at,
+            credential_expires_at=expires_at,
             model=self._model,
             voice=self._voice,
             session_config=session_config,

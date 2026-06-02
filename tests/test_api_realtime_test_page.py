@@ -146,6 +146,22 @@ def test_realtime_test_page_creates_openai_webrtc_call_with_ephemeral_secret() -
     assert 'new RTCSessionDescription({ type: "answer", sdp: answerSdp })' in html
 
 
+def test_realtime_test_page_wires_dashscope_proxy_mode_without_rendering_token() -> None:
+    html = STATIC_PAGE.read_text(encoding="utf-8")
+
+    assert "async function connectDashScopeRealtime" in html
+    assert 'payload.connection_mode === "server_websocket_proxy"' in html
+    assert "new WebSocket(proxyUrl)" in html
+    assert "dashscope.proxy.ready" in html
+    assert "connection_mode=${payload.connection_mode}" in html
+    dashscope_block = html.split("async function connectDashScopeRealtime", 1)[1].split(
+        "async function startSession",
+        1,
+    )[0]
+    assert "clientSecret" not in dashscope_block
+    assert "appendPanel(\"provider-events\", state.toolCallToken" not in dashscope_block
+
+
 def test_openai_realtime_adapter_maps_fixture_events_to_normalized_events() -> None:
     adapter = ADAPTER_JS.read_text(encoding="utf-8")
     fixture = OPENAI_FIXTURE.read_text(encoding="utf-8")

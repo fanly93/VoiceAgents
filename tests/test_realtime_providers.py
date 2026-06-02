@@ -2,15 +2,20 @@ import pytest
 
 from voiceagents.realtime.contracts import (
     ALLOWED_REALTIME_TOOL_NAMES,
+    RealtimeConnectionMode,
     RealtimeClientSecretRequest,
+    RealtimeProviderMode,
     RealtimeProviderName,
     ResponseMode,
     build_default_realtime_session_config,
 )
 from voiceagents.realtime.providers import (
+    DashScopeRealtimeProvider,
     MockRealtimeProvider,
     OpenAIRealtimeProvider,
     RealtimeProviderError,
+    build_realtime_provider,
+    get_realtime_provider_capabilities,
     map_realtime_tools_to_openai_tools,
 )
 
@@ -45,6 +50,57 @@ def make_client_secret_request(response_mode: ResponseMode = ResponseMode.TEXT) 
         locale="en-US",
         safety_subject_id="subject_hash_123",
     )
+
+
+def test_realtime_provider_capabilities_include_supported_providers() -> None:
+    capabilities = get_realtime_provider_capabilities()
+
+    assert set(capabilities) == {
+        RealtimeProviderName.MOCK,
+        RealtimeProviderName.OPENAI_REALTIME,
+        RealtimeProviderName.DASHSCOPE_REALTIME,
+    }
+    assert capabilities[RealtimeProviderName.OPENAI_REALTIME].supported_connection_modes == [
+        RealtimeConnectionMode.BROWSER_WEBRTC_EPHEMERAL
+    ]
+    assert capabilities[RealtimeProviderName.DASHSCOPE_REALTIME].supported_provider_modes == [
+        RealtimeProviderMode.NATIVE_REALTIME
+    ]
+    assert capabilities[RealtimeProviderName.DASHSCOPE_REALTIME].default_model == (
+        "qwen3.5-omni-flash-realtime"
+    )
+
+
+def test_build_realtime_provider_constructs_mock_and_openai_providers() -> None:
+    mock_provider = build_realtime_provider(
+        RealtimeProviderName.MOCK,
+        env={},
+    )
+    openai_provider = build_realtime_provider(
+        RealtimeProviderName.OPENAI_REALTIME,
+        env={
+            "OPENAI_API_KEY": "server-api-key",
+            "VOICEAGENTS_OPENAI_REALTIME_MODEL": "gpt-realtime-custom",
+            "VOICEAGENTS_OPENAI_REALTIME_VOICE": "cedar",
+        },
+    )
+
+    assert isinstance(mock_provider, MockRealtimeProvider)
+    assert isinstance(openai_provider, OpenAIRealtimeProvider)
+
+
+def test_build_realtime_provider_constructs_dashscope_stub_without_network() -> None:
+    provider = build_realtime_provider(
+        RealtimeProviderName.DASHSCOPE_REALTIME,
+        env={
+            "VOICEAGENTS_DASHSCOPE_REALTIME_MODEL": "qwen3.5-omni-plus-realtime",
+            "VOICEAGENTS_DASHSCOPE_BASE_URL": "https://dashscope.aliyuncs.com",
+        },
+    )
+
+    assert isinstance(provider, DashScopeRealtimeProvider)
+    with pytest.raises(RealtimeProviderError, match="DASHSCOPE_API_KEY"):
+        provider.create_client_secret(make_client_secret_request(ResponseMode.VOICE))
 
 
 def test_mock_realtime_provider_returns_deterministic_credentials() -> None:

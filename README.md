@@ -101,15 +101,18 @@ Realtime API endpoints:
 
 - `POST /v1/realtime/client-secret` creates a local realtime session and returns provider credentials plus a session-bound `tool_call_token`.
 - `POST /v1/realtime/tool-call` relays approved realtime tool calls to the backend. Send the relay token as `Authorization: Bearer <tool_call_token>`.
+- `WS /v1/realtime/dashscope/proxy/{session_id}` is the local browser-facing DashScope realtime proxy route for `server_websocket_proxy` sessions. It must authenticate with the session-bound tool-call token and must never expose `DASHSCOPE_API_KEY` to the browser.
+
+DashScope outbound transport dependency decision: automated tests use only a fake upstream transport behind the proxy boundary. The real outbound DashScope WebSocket client dependency is intentionally deferred until manual provider verification confirms the required protocol details; no automated test calls real DashScope or requires real provider credentials.
 
 Realtime provider environment variables:
 
-- `VOICEAGENTS_REALTIME_PROVIDER=mock|openai_realtime` selects the mock-safe local provider or the OpenAI Realtime provider. Mock mode is the default for development and automated tests.
-- `OPENAI_API_KEY` is required only for `openai_realtime`. It is server-only and must never be exposed to the browser, DOM, logs, tickets, screenshots, or committed files.
+- `VOICEAGENTS_REALTIME_PROVIDER=mock|openai_realtime|dashscope_realtime` selects the mock-safe local provider, OpenAI Realtime, or DashScope Realtime. Mock mode is the default for development and automated tests.
+- `OPENAI_API_KEY` is required only for `openai_realtime`. `VOICEAGENTS_DASHSCOPE_API_KEY` is required only for `dashscope_realtime`. Provider keys are server-only and must never be exposed to the browser, DOM, logs, tickets, screenshots, or committed files.
 - `VOICEAGENTS_OPENAI_REALTIME_MODEL` defaults to `gpt-realtime-2`.
 - `VOICEAGENTS_OPENAI_REALTIME_VOICE` defaults to `marin`.
 - `VOICEAGENTS_TRANSCRIPT_LOGGING=off|structured|transcript` controls transcript text logging. When unset, it defaults to `structured`; use `transcript` only when local development explicitly needs verbatim transcript text.
-- `VOICEAGENTS_ENABLE_REALTIME_DEV_ENDPOINTS=false|true` gates the real provider client-secret endpoint. It defaults to `false`; set it to `true` only for local OpenAI Realtime development.
+- `VOICEAGENTS_ENABLE_REALTIME_DEV_ENDPOINTS=false|true` gates the real provider client-secret endpoint. It defaults to `false`; set it to `true` only for local real-provider development.
 
 OpenAI realtime provider mode can be run locally with:
 
@@ -134,7 +137,7 @@ Run the realtime smoke test against a running mock-mode server:
 ./.venv/bin/python scripts/smoke_realtime_api.py --base-url http://127.0.0.1:8000
 ```
 
-The realtime smoke script is intentionally mock-mode only. It validates `/health`, client-secret minting, the four approved tool calls, unknown tool rejection, and missing authorization rejection without requiring `OPENAI_API_KEY`. Real OpenAI voice verification is manual; use `docs/specs/voiceagents-openai-realtime-voice-mvp-manual-checklist.md` for the 3 minute `/realtime-test` run and browser failure-mode checks.
+The realtime smoke script is intentionally mock-mode only. It validates `/health`, client-secret minting, the four approved tool calls, unknown tool rejection, and missing authorization rejection without requiring `OPENAI_API_KEY`. Real OpenAI voice verification is manual; use `docs/specs/voiceagents-openai-realtime-voice-mvp-manual-checklist.md` for the 3 minute `/realtime-test` run and browser failure-mode checks. DashScope realtime proxy validation is documented in `docs/specs/voiceagents-dashscope-realtime-manual-checklist.md`; it currently covers the fake-tested `server_websocket_proxy` boundary and defers real outbound transport.
 
 Realtime tool-call responses include safe status semantics:
 

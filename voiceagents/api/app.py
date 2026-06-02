@@ -1,12 +1,14 @@
 from datetime import datetime, timezone
+import inspect
 import os
 from pathlib import Path
 from urllib.parse import urlparse
 import uuid
 
-from fastapi import Body, FastAPI, Header, HTTPException, Request
+from fastapi import Body, FastAPI, Header, HTTPException, Request, WebSocket
 from fastapi.responses import FileResponse
 from pydantic import ValidationError
+from starlette.websockets import WebSocketDisconnect
 
 from voiceagents.adapters.handoff import MockHandoffAdapter
 from voiceagents.adapters.knowledge import MockKnowledgeAdapter
@@ -33,6 +35,11 @@ from voiceagents.realtime.diagnostics import (
     RealtimeDevDiagnostics,
     build_realtime_dev_diagnostics,
 )
+from voiceagents.realtime.dashscope import (
+    DashScopeEventError,
+    normalize_dashscope_event,
+    validate_dashscope_proxy_message,
+)
 from voiceagents.realtime.event_log import (
     find_blocked_event_keys,
     JsonlRealtimeTranscriptRepository,
@@ -44,6 +51,7 @@ from voiceagents.realtime.providers import (
     MockRealtimeProvider,
     OpenAIRealtimeProvider,
     RealtimeProviderError,
+    build_realtime_provider,
 )
 from voiceagents.realtime.redaction import redact_text
 from voiceagents.realtime.session_store import InMemoryVoiceSessionStore, VoiceSessionNotFound
@@ -79,6 +87,7 @@ def create_app(
     realtime_event_repository: VoiceEventRepository | None = None,
     realtime_transcript_repository: RealtimeTranscriptRepository | None = None,
     realtime_validation_repository: ValidationRunRepository | None = None,
+    dashscope_upstream_transport: object | None = None,
 ) -> FastAPI:
     app = FastAPI(title="VoiceAgents")
     call_flow_service = CallFlowService(
@@ -103,6 +112,7 @@ def create_app(
     app.state.realtime_transcript_repository = transcript_repository
     app.state.realtime_validation_repository = validation_repository
     app.state.realtime_client_secret_rate_limits = {}
+    app.state.dashscope_upstream_transport = dashscope_upstream_transport
 
     @app.get("/health")
     def health() -> dict[str, str]:
@@ -327,7 +337,17 @@ def create_app(
         authorization: str | None = Header(default=None),
     ) -> RealtimeToolCallResponse:
         tool_call_token = _extract_bearer_token(authorization)
-        provider_name = _current_realtime_provider_name()
+        try:
+            provider_name = session_store.get_session_provider(request.session_id)
+        except VoiceSessionNotFound as error:
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "error_code": "invalid_tool_call_token",
+                    "message": "Invalid realtime tool-call token or binding.",
+                    "tool_name": request.tool_name,
+                },
+            ) from error
         try:
             response = tool_router.execute(
                 request,
@@ -396,6 +416,75 @@ def create_app(
         )
         return response
 
+    @app.websocket("/v1/realtime/dashscope/proxy/{session_id}")
+    async def dashscope_realtime_proxy(websocket: WebSocket, session_id: str) -> None:
+        token = websocket.query_params.get("token")
+        if token is None:
+            await websocket.close(code=1008, reason="Missing DashScope proxy token")
+            return
+        try:
+            provider_name = session_store.get_session_provider(session_id)
+            token_is_valid = session_store.verify_tool_call_token(session_id, token)
+        except VoiceSessionNotFound:
+            await websocket.close(code=1008, reason="Invalid DashScope proxy session")
+            return
+        if provider_name is not RealtimeProviderName.DASHSCOPE_REALTIME or not token_is_valid:
+            await websocket.close(code=1008, reason="Invalid DashScope proxy token")
+            return
+
+        await websocket.accept()
+        await websocket.send_json(
+            {
+                "type": "dashscope.proxy.ready",
+                "session_id": session_id,
+            }
+        )
+        while True:
+            try:
+                message = await websocket.receive_json()
+            except WebSocketDisconnect:
+                return
+            try:
+                safe_message = validate_dashscope_proxy_message(message)
+            except DashScopeEventError:
+                await websocket.send_json(
+                    {
+                        "type": "dashscope.proxy.error",
+                        "error_code": "invalid_envelope",
+                    }
+                )
+                await websocket.close(code=1008, reason="Invalid DashScope proxy envelope")
+                return
+            await websocket.send_json(
+                {
+                    "type": "dashscope.proxy.accepted",
+                    "message_type": safe_message["type"],
+                }
+            )
+            if dashscope_upstream_transport is not None:
+                provider_event = await _send_dashscope_upstream(
+                    dashscope_upstream_transport,
+                    safe_message,
+                )
+                normalized_event = normalize_dashscope_event(
+                    provider_event,
+                    session_id=session_id,
+                    call_id=session_store.get_session(session_id).call_id,
+                    merchant_id=session_store.get_session(session_id).merchant_id,
+                )
+                await websocket.send_json(
+                    {
+                        "type": "dashscope.proxy.event",
+                        "event": {
+                            "provider": normalized_event.provider.value,
+                            "event_type": normalized_event.event_type.value,
+                            "state": normalized_event.state.value,
+                            "speaker": normalized_event.speaker,
+                            "text": normalized_event.text,
+                        },
+                    }
+                )
+
     return app
 
 
@@ -404,13 +493,13 @@ def _enforce_real_provider_dev_gate(
     request: Request,
     app: FastAPI,
 ) -> None:
-    if provider_name is not RealtimeProviderName.OPENAI_REALTIME:
+    if provider_name is RealtimeProviderName.MOCK:
         return
 
     if os.getenv("VOICEAGENTS_ENABLE_REALTIME_DEV_ENDPOINTS", "false").lower() != "true":
         raise HTTPException(
             status_code=403,
-            detail="OpenAI realtime dev endpoints are disabled",
+            detail="realtime dev endpoints are disabled for real providers",
         )
 
     origin = request.headers.get("origin")
@@ -492,15 +581,10 @@ def _current_realtime_provider_name() -> RealtimeProviderName:
 def _build_realtime_provider(
     provider_name: RealtimeProviderName,
 ) -> MockRealtimeProvider | OpenAIRealtimeProvider:
-    if provider_name is RealtimeProviderName.MOCK:
-        return MockRealtimeProvider()
-    if provider_name is RealtimeProviderName.OPENAI_REALTIME:
-        return OpenAIRealtimeProvider(
-            api_key=os.getenv("OPENAI_API_KEY"),
-            model=os.getenv("VOICEAGENTS_OPENAI_REALTIME_MODEL", "gpt-realtime-2"),
-            voice=os.getenv("VOICEAGENTS_OPENAI_REALTIME_VOICE", "marin"),
-        )
-    raise HTTPException(status_code=500, detail=f"Unsupported realtime provider: {provider_name}")
+    try:
+        return build_realtime_provider(provider_name, env=os.environ)
+    except RealtimeProviderError as error:
+        raise HTTPException(status_code=500, detail=str(error)) from error
 
 
 def _extract_bearer_token(authorization: str | None) -> str:
@@ -534,3 +618,18 @@ def _parse_provider_expiry(expires_at: str | None) -> datetime | None:
         return datetime.fromisoformat(normalized)
     except ValueError:
         return None
+
+
+async def _send_dashscope_upstream(
+    transport: object,
+    message: dict[str, object],
+) -> dict[str, object]:
+    sender = getattr(transport, "send", None)
+    if sender is None:
+        raise RuntimeError("DashScope upstream transport must define send")
+    result = sender(message)
+    if inspect.isawaitable(result):
+        result = await result
+    if not isinstance(result, dict):
+        raise RuntimeError("DashScope upstream transport returned invalid event")
+    return result

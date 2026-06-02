@@ -267,6 +267,7 @@ git diff --check
 
 - Realtime Voice Dev Diagnostics v1 已完成：`GET /v1/realtime/dev-diagnostics`、`/realtime-test` 的 `Run Diagnostics`、`scripts/diagnose_realtime_dev.py`。
 - Realtime Tool Error Semantics v1 已完成：`tool_status` / `error_message`、结构化 tool-call HTTP 错误、adapter exception 安全降级、event log 使用真实 tool status、失败工具结果不回传 provider。
+- DashScope realtime proxy 当前有 fake-tested `server_websocket_proxy` 边界、provider/event/tool adapter 和 `/realtime-test` 基础接线；真实 outbound DashScope WebSocket client 仍按 `docs/specs/voiceagents-dashscope-realtime-manual-checklist.md` 后置到人工验证后决定。
 - Validation Harness v1 还没有 CLI，但当前没有明确痛点，先不做。
 - Validation report viewer v1 只解决本地查看和 1-3 分钟 report prep；public sharing/auth 或生产 report portal 已记录为阶段 2，当前先后置。
 - 客服后台接手页面 / support workbench 已记录为阶段 3，当前先后置。
