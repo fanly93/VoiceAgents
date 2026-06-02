@@ -200,6 +200,7 @@
         sessionConfig: null,
         peerConnection: null,
         dataChannel: null,
+        dashScopeSocket: null,
         localStream: null,
         remoteAudio: null,
         isMuted: false,
@@ -529,9 +530,13 @@
         state.activeConnectionId += 1;
         const dataChannel = state.dataChannel;
         const peerConnection = state.peerConnection;
+        const dashScopeSocket = state.dashScopeSocket;
         const localStream = state.localStream;
         const remoteAudio = state.remoteAudio;
 
+        if (dashScopeSocket) {
+          dashScopeSocket.close();
+        }
         if (dataChannel) {
           dataChannel.close();
         }
@@ -551,6 +556,7 @@
 
         state.peerConnection = null;
         state.dataChannel = null;
+        state.dashScopeSocket = null;
         state.localStream = null;
         state.remoteAudio = null;
         state.clientSecret = null;
@@ -649,6 +655,58 @@
         }
       }
 
+      function dashScopeProxyUrl() {
+        if (!state.connectionUrl || !state.toolCallToken) {
+          throw new Error("DashScope proxy connection is not ready.");
+        }
+        const proxyUrl = new URL(state.connectionUrl, window.location.origin);
+        proxyUrl.protocol = proxyUrl.protocol === "https:" ? "wss:" : "ws:";
+        proxyUrl.searchParams.set("token", state.toolCallToken);
+        return proxyUrl.toString();
+      }
+
+      async function connectDashScopeRealtime(connectionId) {
+        const proxyUrl = dashScopeProxyUrl();
+        const socket = new WebSocket(proxyUrl);
+        state.dashScopeSocket = socket;
+        await new Promise((resolve, reject) => {
+          socket.addEventListener("open", () => {
+            if (state.activeConnectionId !== connectionId) {
+              socket.close();
+              reject(new Error("Realtime connection was replaced."));
+              return;
+            }
+            appendPanel("provider-events", "dashscope_proxy=open");
+            socket.send(JSON.stringify({ type: "control", payload: { action: "start" } }));
+            resolve();
+          }, { once: true });
+          socket.addEventListener("error", () => {
+            reject(new Error("DashScope proxy connection failed."));
+          }, { once: true });
+        });
+        socket.addEventListener("close", () => {
+          if (state.dashScopeSocket === socket) {
+            writePanel("session-state", "dashscope_proxy_closed");
+          }
+        });
+        socket.addEventListener("message", (messageEvent) => {
+          const payload = parseProviderMessage(messageEvent.data);
+          if (!payload) {
+            return;
+          }
+          if (payload.type === "dashscope.proxy.ready") {
+            appendPanel("provider-events", "dashscope.proxy.ready");
+            return;
+          }
+          if (payload.type === "dashscope.proxy.event" && payload.event) {
+            renderNormalizedEvent(payload.event);
+            relayNormalizedEvent(payload.event).catch((error) => {
+              appendPanel("provider-events", error.message);
+            });
+          }
+        });
+      }
+
       async function startSession() {
         if (state.isStarting) {
           return;
@@ -692,14 +750,16 @@
         state.sessionConfig = payload.session_config;
         if (payload.provider === "openai_realtime") {
           await connectOpenAIRealtime(connectionId);
+        } else if (payload.connection_mode === "server_websocket_proxy") {
+          await connectDashScopeRealtime(connectionId);
         }
         state.isStarting = false;
         setSessionControlsDisabled(true);
-        writePanel("session-state", payload.provider === "openai_realtime" ? "connected" : "ready");
+        writePanel("session-state", payload.provider === "openai_realtime" || payload.connection_mode === "server_websocket_proxy" ? "connected" : "ready");
         writePanel("latency", `${Math.round(performance.now() - startedAt)} ms`);
         appendPanel(
           "provider-events",
-          `provider=${payload.provider} model=${payload.model} tools=${payload.session_config.tools.length} response_mode=${el("response-mode").value}`,
+          `provider=${payload.provider} model=${payload.model} connection_mode=${payload.connection_mode} tools=${payload.session_config.tools.length} response_mode=${el("response-mode").value}`,
         );
       }
 
@@ -865,6 +925,7 @@
         relayNormalizedEvent,
         handleProviderEvent,
         connectOpenAIRealtime,
+        connectDashScopeRealtime,
         resetRealtimeResources,
         setDebugSession: (debugSession) => {
           state.sessionId = debugSession.sessionId;
@@ -881,6 +942,7 @@
           hasSessionConfig: Boolean(state.sessionConfig),
           hasPeerConnection: Boolean(state.peerConnection),
           hasDataChannel: Boolean(state.dataChannel),
+          hasDashScopeSocket: Boolean(state.dashScopeSocket),
           hasLocalStream: Boolean(state.localStream),
           hasRemoteAudio: Boolean(state.remoteAudio),
         }),
