@@ -4,7 +4,12 @@ from typing import Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from voiceagents.realtime.contracts import RealtimeEventIngestRequest, RealtimeToolCallResponse
+from voiceagents.realtime.contracts import (
+    RealtimeEventIngestRequest,
+    RealtimeSessionConfig,
+    RealtimeToolCallRequest,
+    RealtimeToolCallResponse,
+)
 
 
 class RealtimeOutboundEventKind(StrEnum):
@@ -109,7 +114,26 @@ class RealtimeOutboundTransport(Protocol):
 
 
 @runtime_checkable
-class RealtimeProviderEventAdapter(Protocol):
+@runtime_checkable
+class NativeRealtimeProviderAdapter(Protocol):
+    def build_connection_url(self) -> str:
+        ...
+
+    def build_headers(self) -> Mapping[str, str]:
+        ...
+
+    def build_session_update_message(
+        self,
+        session_config: RealtimeSessionConfig,
+    ) -> Mapping[str, object]:
+        ...
+
+    def map_browser_message(
+        self,
+        message: RealtimeBrowserProxyMessage,
+    ) -> Mapping[str, object] | bytes | None:
+        ...
+
     def normalize_provider_event(
         self,
         payload: Mapping[str, object],
@@ -120,12 +144,25 @@ class RealtimeProviderEventAdapter(Protocol):
     ) -> RealtimeOutboundEvent | RealtimeEventIngestRequest:
         ...
 
+    def normalize_provider_tool_call(
+        self,
+        payload: Mapping[str, object],
+        *,
+        session_id: str,
+        call_id: str,
+        merchant_id: str,
+    ) -> RealtimeToolCallRequest:
+        ...
+
     def build_tool_result_messages(
         self,
         response: RealtimeToolCallResponse,
         *,
         provider_call_id: str,
     ) -> list[Mapping[str, object]]:
+        ...
+
+    def safe_connection_summary(self) -> Mapping[str, object]:
         ...
 
 
