@@ -3,12 +3,15 @@ from fastapi.testclient import TestClient
 from voiceagents.api.app import create_app
 
 
+LOCAL_ORIGIN = {"Origin": "http://127.0.0.1:8000"}
+
+
 def test_realtime_dev_diagnostics_endpoint_returns_mock_pass(monkeypatch) -> None:
     monkeypatch.setenv("VOICEAGENTS_REALTIME_PROVIDER", "mock")
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     client = TestClient(create_app())
 
-    response = client.get("/v1/realtime/dev-diagnostics")
+    response = client.get("/v1/realtime/dev-diagnostics", headers=LOCAL_ORIGIN)
 
     assert response.status_code == 200
     body = response.json()
@@ -26,7 +29,7 @@ def test_realtime_dev_diagnostics_endpoint_reports_unsupported_provider(monkeypa
     monkeypatch.setenv("VOICEAGENTS_REALTIME_PROVIDER", "dashscope_realtime")
     client = TestClient(create_app())
 
-    response = client.get("/v1/realtime/dev-diagnostics")
+    response = client.get("/v1/realtime/dev-diagnostics", headers=LOCAL_ORIGIN)
 
     assert response.status_code == 200
     body = response.json()
@@ -45,7 +48,7 @@ def test_realtime_dev_diagnostics_endpoint_reports_openai_gate_and_key_without_l
     monkeypatch.delenv("VOICEAGENTS_ENABLE_REALTIME_DEV_ENDPOINTS", raising=False)
     client = TestClient(create_app())
 
-    response = client.get("/v1/realtime/dev-diagnostics")
+    response = client.get("/v1/realtime/dev-diagnostics", headers=LOCAL_ORIGIN)
 
     assert response.status_code == 200
     body = response.json()
@@ -65,7 +68,7 @@ def test_realtime_dev_diagnostics_endpoint_reports_invalid_optional_config(monke
     monkeypatch.setenv("VOICEAGENTS_REALTIME_CLIENT_SECRET_RATE_LIMIT", "zero")
     client = TestClient(create_app())
 
-    response = client.get("/v1/realtime/dev-diagnostics")
+    response = client.get("/v1/realtime/dev-diagnostics", headers=LOCAL_ORIGIN)
 
     assert response.status_code == 200
     body = response.json()
@@ -77,3 +80,16 @@ def test_realtime_dev_diagnostics_endpoint_reports_invalid_optional_config(monke
         "status"
     ] == "warn"
 
+
+def test_realtime_dev_diagnostics_endpoint_rejects_disallowed_origin(monkeypatch) -> None:
+    monkeypatch.setenv("VOICEAGENTS_REALTIME_PROVIDER", "openai_realtime")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-secret-should-not-render")
+    client = TestClient(create_app())
+
+    response = client.get(
+        "/v1/realtime/dev-diagnostics",
+        headers={"Origin": "https://evil.example"},
+    )
+
+    assert response.status_code == 403
+    assert "sk-secret-should-not-render" not in response.text
