@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from voiceagents.realtime.dashscope import DashScopeRealtimeAdapter, DashScopeRealtimeConfig
@@ -10,10 +12,10 @@ from voiceagents.realtime.outbound import RealtimeOutboundEventKind
 
 class FakeWebSocketClient:
     def __init__(self) -> None:
-        self.sent_json: list[dict[str, object]] = []
+        self.sent_json: list[object] = []
         self.sent_audio: list[bytes] = []
         self.closed = False
-        self.events: list[dict[str, object]] = [{"type": "session.created"}]
+        self.events: list[object] = [{"type": "session.created"}]
 
     async def send(self, payload: object) -> None:
         if isinstance(payload, bytes):
@@ -21,7 +23,7 @@ class FakeWebSocketClient:
         else:
             self.sent_json.append(payload)
 
-    async def recv(self) -> dict[str, object]:
+    async def recv(self) -> object:
         return self.events.pop(0)
 
     async def close(self) -> None:
@@ -75,11 +77,43 @@ async def test_dashscope_transport_sends_json_audio_receives_and_closes_fake_cli
     event = await transport.receive()
     await transport.close()
 
-    assert fake_client.sent_json == [{"type": "session.update"}]
+    assert fake_client.sent_json == [json.dumps({"type": "session.update"})]
     assert fake_client.sent_audio == [b"pcm16"]
     assert event.kind is RealtimeOutboundEventKind.JSON
     assert event.payload == {"type": "session.created"}
     assert fake_client.closed is True
+
+
+@pytest.mark.anyio
+async def test_dashscope_transport_serializes_json_for_real_websocket_shape() -> None:
+    fake_client = FakeWebSocketClient()
+    transport = DashScopeRealtimeTransport(
+        make_adapter(),
+        client_factory=lambda _url, _headers: fake_client,
+    )
+
+    await transport.connect()
+    await transport.send_json({"type": "session.update"})
+    await transport.close()
+
+    assert fake_client.sent_json == [json.dumps({"type": "session.update"})]
+
+
+@pytest.mark.anyio
+async def test_dashscope_transport_parses_json_string_provider_events() -> None:
+    fake_client = FakeWebSocketClient()
+    fake_client.events = [json.dumps({"type": "session.created"})]
+    transport = DashScopeRealtimeTransport(
+        make_adapter(),
+        client_factory=lambda _url, _headers: fake_client,
+    )
+
+    await transport.connect()
+    event = await transport.receive()
+    await transport.close()
+
+    assert event.kind is RealtimeOutboundEventKind.JSON
+    assert event.payload == {"type": "session.created"}
 
 
 @pytest.mark.anyio

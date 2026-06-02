@@ -1,4 +1,5 @@
 import inspect
+import json
 from collections.abc import Awaitable, Callable, Mapping
 
 from voiceagents.realtime.dashscope import DashScopeRealtimeAdapter
@@ -43,7 +44,7 @@ class DashScopeRealtimeTransport:
 
     async def send_json(self, payload: Mapping[str, object]) -> None:
         client = self._require_client()
-        await _call_client_method(client, "send", dict(payload))
+        await _call_client_method(client, "send", json.dumps(dict(payload)))
 
     async def send_audio(self, audio: bytes) -> None:
         client = self._require_client()
@@ -56,13 +57,14 @@ class DashScopeRealtimeTransport:
             return RealtimeOutboundEvent(kind=RealtimeOutboundEventKind.AUDIO, audio=payload)
         if isinstance(payload, dict):
             return RealtimeOutboundEvent(kind=RealtimeOutboundEventKind.JSON, payload=payload)
-        return RealtimeOutboundEvent(
-            kind=RealtimeOutboundEventKind.ERROR,
-            safe_error=RealtimeSafeProviderError(
-                code="invalid_provider_event",
-                safe_summary="DashScope returned an unsupported outbound event shape",
-            ),
-        )
+        if isinstance(payload, str):
+            try:
+                decoded = json.loads(payload)
+            except json.JSONDecodeError:
+                return _invalid_provider_event()
+            if isinstance(decoded, dict):
+                return RealtimeOutboundEvent(kind=RealtimeOutboundEventKind.JSON, payload=decoded)
+        return _invalid_provider_event()
 
     async def close(self) -> None:
         if self._client is None:
@@ -112,3 +114,13 @@ def _safe_transport_error(error: Exception) -> str:
     if any(marker in message.lower() for marker in unsafe_markers):
         return "DashScope outbound transport failed"
     return message or "DashScope outbound transport failed"
+
+
+def _invalid_provider_event() -> RealtimeOutboundEvent:
+    return RealtimeOutboundEvent(
+        kind=RealtimeOutboundEventKind.ERROR,
+        safe_error=RealtimeSafeProviderError(
+            code="invalid_provider_event",
+            safe_summary="DashScope returned an unsupported outbound event shape",
+        ),
+    )

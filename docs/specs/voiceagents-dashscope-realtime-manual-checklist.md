@@ -1,6 +1,6 @@
 # VoiceAgents DashScope Realtime Manual Checklist
 
-Status: DRAFT / REAL PROVIDER MANUAL SMOKE PENDING
+Status: DRAFT / REAL PROVIDER PYTEST SMOKE AVAILABLE
 
 Use this checklist only after the fake-transport proxy tests pass. Do not commit real provider credentials, raw audio, SDP, Authorization headers, tool-call tokens, or unredacted transcripts.
 
@@ -18,9 +18,9 @@ Expected result:
 - `/v1/realtime/dashscope/proxy/{session_id}` requires a session-bound token.
 - Browser-to-proxy envelopes reject secret-bearing keys.
 - Fake upstream events normalize to safe VoiceAgents events.
-- The real outbound transport is fake-client tested and does not open network sockets in automated tests.
+- The real outbound transport is fake-client tested and does not open network sockets unless the live-test flag is explicitly enabled.
 - `/realtime-test` loads the DashScope browser adapter and does not relay DashScope provider events to `/v1/realtime/event`.
-- No automated test calls real DashScope.
+- `tests/test_realtime_dashscope_live.py` skips by default and calls real DashScope only when the live-test flag and API key are configured.
 
 ## Required Local Env
 
@@ -32,6 +32,7 @@ VOICEAGENTS_DASHSCOPE_API_KEY=...
 VOICEAGENTS_DASHSCOPE_REALTIME_MODEL=qwen3.5-omni-flash-realtime
 VOICEAGENTS_DASHSCOPE_BASE_URL=https://dashscope.aliyuncs.com
 VOICEAGENTS_TRANSCRIPT_LOGGING=structured
+VOICEAGENTS_RUN_DASHSCOPE_LIVE_TESTS=true
 ```
 
 Optional:
@@ -40,9 +41,21 @@ Optional:
 VOICEAGENTS_DASHSCOPE_REALTIME_VOICE=...
 ```
 
+If the local environment uses a SOCKS proxy, install proxy support for the optional WebSocket client:
+
+```bash
+./.venv/bin/python -m pip install python-socks
+```
+
+Run the real model smoke test:
+
+```bash
+./.venv/bin/python -m pytest tests/test_realtime_dashscope_live.py -q
+```
+
 ## Manual Scope
 
-Current implementation exposes the browser-safe local proxy boundary, fake upstream relay, server-side DashScope protocol mapping, lazy optional `websockets` outbound transport, provider tool-call result relay, and `/realtime-test` DashScope browser adapter wiring. Automated tests use fake clients and must not open network connections.
+Current implementation exposes the browser-safe local proxy boundary, fake upstream relay, server-side DashScope protocol mapping, lazy optional `websockets` outbound transport, provider tool-call result relay, and `/realtime-test` DashScope browser adapter wiring. Default automated tests use fake clients and must not open network connections; the live pytest smoke is opt-in.
 
 Manual validation should confirm:
 

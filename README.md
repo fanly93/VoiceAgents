@@ -104,7 +104,7 @@ Realtime API endpoints:
 - `POST /v1/realtime/tool-call` relays approved realtime tool calls to the backend. Send the relay token as `Authorization: Bearer <tool_call_token>`.
 - `WS /v1/realtime/dashscope/proxy/{session_id}` is the local browser-facing DashScope realtime proxy route for `server_websocket_proxy` sessions. It must authenticate with the session-bound tool-call token and must never expose `DASHSCOPE_API_KEY` to the browser.
 
-DashScope outbound transport dependency decision: automated tests use only fake clients behind the proxy boundary. Local real-provider testing uses a lazy optional `websockets` import inside `voiceagents/realtime/dashscope_transport.py`; no automated test calls real DashScope or requires real provider credentials.
+DashScope outbound transport dependency decision: default automated tests use only fake clients behind the proxy boundary. Local real-provider testing uses a lazy optional `websockets` import inside `voiceagents/realtime/dashscope_transport.py`; `tests/test_realtime_dashscope_live.py` calls real DashScope only when `VOICEAGENTS_RUN_DASHSCOPE_LIVE_TESTS=true` and a server-side DashScope API key are configured.
 
 Realtime provider environment variables:
 
@@ -140,6 +140,18 @@ VOICEAGENTS_DASHSCOPE_REALTIME_MODEL=qwen3.5-omni-flash-realtime
 VOICEAGENTS_DASHSCOPE_BASE_URL=https://dashscope.aliyuncs.com
 VOICEAGENTS_ENABLE_REALTIME_DEV_ENDPOINTS=true
 VOICEAGENTS_TRANSCRIPT_LOGGING=structured
+```
+
+If the local environment routes WebSocket connections through a SOCKS proxy, also install proxy support:
+
+```bash
+./.venv/bin/python -m pip install python-socks
+```
+
+Run the real DashScope model test explicitly with:
+
+```bash
+VOICEAGENTS_RUN_DASHSCOPE_LIVE_TESTS=true ./.venv/bin/python -m pytest tests/test_realtime_dashscope_live.py -q
 ```
 
 Current realtime scope is browser/local validation only. This phase does not implement telephony, phone-number provisioning, inbound/outbound calling, or raw audio storage.
