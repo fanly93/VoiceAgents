@@ -25,6 +25,7 @@ ValidateProxyMessage = Callable[[object], dict[str, object]]
 NormalizeProviderEvent = Callable[..., RealtimeEventIngestRequest]
 NormalizeToolCall = Callable[..., RealtimeToolCallRequest]
 BuildToolResultMessages = Callable[..., list[Mapping[str, object]]]
+UpstreamTransportFactory = Callable[[], object]
 
 
 @dataclass
@@ -38,6 +39,7 @@ class RealtimeProxyCoordinator:
     accepted_event_type: str
     error_event_type: str
     upstream_transport: object | None = None
+    upstream_transport_factory: UpstreamTransportFactory | None = None
     normalize_provider_event: NormalizeProviderEvent | None = None
     event_repository: VoiceEventRepository | None = None
     transcript_logging_mode: TranscriptLoggingMode = TranscriptLoggingMode.STRUCTURED
@@ -83,8 +85,9 @@ class RealtimeProxyCoordinator:
                         "message_type": safe_message["type"],
                     }
                 )
-                if self.upstream_transport is not None and self.normalize_provider_event is not None:
-                    provider_event = await _send_upstream(self.upstream_transport, safe_message)
+                upstream_transport = await self._get_upstream_transport()
+                if upstream_transport is not None and self.normalize_provider_event is not None:
+                    provider_event = await _send_upstream(upstream_transport, safe_message)
                     session = self.session_store.get_session(self.session_id)
                     if self._is_tool_call_event(provider_event):
                         tool_response = self._execute_tool_call(provider_event, session)
@@ -94,7 +97,7 @@ class RealtimeProxyCoordinator:
                                 tool_response,
                                 provider_call_id=provider_call_id,
                             ):
-                                await _send_upstream(self.upstream_transport, provider_message)
+                                await _send_upstream(upstream_transport, provider_message)
                         await websocket.send_json(
                             {
                                 "type": self.tool_result_event_type,
@@ -136,6 +139,17 @@ class RealtimeProxyCoordinator:
             return False
         return provider_name is self.provider and token_is_valid
 
+    async def _get_upstream_transport(self) -> object | None:
+        if self.upstream_transport is not None:
+            return self.upstream_transport
+        if self.upstream_transport_factory is None:
+            return None
+        result = self.upstream_transport_factory()
+        if inspect.isawaitable(result):
+            result = await result
+        self.upstream_transport = result
+        return result
+
     def _is_tool_call_event(self, provider_event: Mapping[str, object]) -> bool:
         provider_event_type = provider_event.get("type")
         return isinstance(provider_event_type, str) and provider_event_type in self.tool_call_event_types
@@ -170,6 +184,7 @@ async def _send_upstream(
     transport: object,
     message: Mapping[str, object],
 ) -> dict[str, object]:
+    await _connect_upstream(transport)
     sender = getattr(transport, "send", None)
     if sender is None:
         raise RuntimeError("Realtime upstream transport must define send")
@@ -179,6 +194,15 @@ async def _send_upstream(
     if not isinstance(result, dict):
         raise RuntimeError("Realtime upstream transport returned invalid event")
     return result
+
+
+async def _connect_upstream(transport: object) -> None:
+    connector = getattr(transport, "connect", None)
+    if connector is None:
+        return
+    result = connector()
+    if inspect.isawaitable(result):
+        await result
 
 
 async def _close_upstream(transport: object) -> None:

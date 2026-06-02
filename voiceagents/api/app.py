@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from datetime import datetime, timezone
 import os
 from pathlib import Path
@@ -34,11 +35,14 @@ from voiceagents.realtime.diagnostics import (
     build_realtime_dev_diagnostics,
 )
 from voiceagents.realtime.dashscope import (
+    DashScopeRealtimeAdapter,
+    DashScopeRealtimeConfig,
     build_dashscope_tool_result_messages,
     normalize_dashscope_event,
     normalize_dashscope_tool_call,
     validate_dashscope_proxy_message,
 )
+from voiceagents.realtime.dashscope_transport import DashScopeRealtimeTransport
 from voiceagents.realtime.event_log import (
     find_blocked_event_keys,
     JsonlRealtimeTranscriptRepository,
@@ -88,6 +92,7 @@ def create_app(
     realtime_transcript_repository: RealtimeTranscriptRepository | None = None,
     realtime_validation_repository: ValidationRunRepository | None = None,
     dashscope_upstream_transport: object | None = None,
+    dashscope_upstream_transport_factory: Callable[[], object] | None = None,
 ) -> FastAPI:
     app = FastAPI(title="VoiceAgents")
     call_flow_service = CallFlowService(
@@ -113,6 +118,7 @@ def create_app(
     app.state.realtime_validation_repository = validation_repository
     app.state.realtime_client_secret_rate_limits = {}
     app.state.dashscope_upstream_transport = dashscope_upstream_transport
+    app.state.dashscope_upstream_transport_factory = dashscope_upstream_transport_factory
 
     @app.get("/health")
     def health() -> dict[str, str]:
@@ -428,6 +434,9 @@ def create_app(
             accepted_event_type="dashscope.proxy.accepted",
             error_event_type="dashscope.proxy.error",
             upstream_transport=dashscope_upstream_transport,
+            upstream_transport_factory=(
+                dashscope_upstream_transport_factory or _build_dashscope_upstream_transport_factory()
+            ),
             normalize_provider_event=normalize_dashscope_event,
             event_repository=event_repository,
             transcript_logging_mode=_current_transcript_logging_mode(),
@@ -544,6 +553,17 @@ def _build_realtime_provider(
         return build_realtime_provider(provider_name, env=os.environ)
     except RealtimeProviderError as error:
         raise HTTPException(status_code=500, detail=str(error)) from error
+
+
+def _build_dashscope_upstream_transport_factory() -> Callable[[], object] | None:
+    config = DashScopeRealtimeConfig.from_env(os.environ)
+    if not config.has_api_key:
+        return None
+
+    def factory() -> DashScopeRealtimeTransport:
+        return DashScopeRealtimeTransport(DashScopeRealtimeAdapter(config))
+
+    return factory
 
 
 def _extract_bearer_token(authorization: str | None) -> str:
