@@ -29,6 +29,10 @@ from voiceagents.realtime.contracts import (
     VoiceEvent,
     VoiceSessionState,
 )
+from voiceagents.realtime.diagnostics import (
+    RealtimeDevDiagnostics,
+    build_realtime_dev_diagnostics,
+)
 from voiceagents.realtime.event_log import (
     find_blocked_event_keys,
     JsonlRealtimeTranscriptRepository,
@@ -123,6 +127,10 @@ def create_app(
     @app.get("/v1/realtime/validation-scenarios")
     def list_realtime_validation_scenarios() -> list:
         return STANDARD_VALIDATION_SCENARIOS
+
+    @app.get("/v1/realtime/dev-diagnostics")
+    def get_realtime_dev_diagnostics() -> RealtimeDevDiagnostics:
+        return build_realtime_dev_diagnostics()
 
     @app.post("/v1/realtime/validation-runs")
     def start_realtime_validation_run(
