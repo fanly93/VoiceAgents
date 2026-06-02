@@ -246,7 +246,7 @@ class DashScopeRealtimeAdapter:
         *,
         provider_call_id: str,
     ) -> list[Mapping[str, object]]:
-        return [build_dashscope_tool_result_event(response, provider_call_id=provider_call_id)]
+        return build_dashscope_tool_result_messages(response, provider_call_id=provider_call_id)
 
 
 def normalize_dashscope_event(
@@ -424,6 +424,33 @@ def build_dashscope_tool_result_event(
         "tool_status": response.tool_status.value,
         "output": output,
     }
+
+
+def build_dashscope_tool_result_messages(
+    response: RealtimeToolCallResponse,
+    *,
+    provider_call_id: str,
+) -> list[Mapping[str, object]]:
+    output: dict[str, object] = {
+        "ok": response.ok,
+        "safe_summary": response.safe_summary,
+        "error_message": response.error_message,
+        "error_code": response.error_code.value if response.error_code is not None else None,
+        "handoff_required": response.handoff_required,
+    }
+    if response.ok:
+        output["result"] = response.result
+    return [
+        {
+            "type": "conversation.item.create",
+            "item": {
+                "type": "function_call_output",
+                "call_id": provider_call_id,
+                "output": json.dumps(output, sort_keys=True),
+            },
+        },
+        {"type": "response.create"},
+    ]
 
 
 def validate_dashscope_proxy_message(message: object) -> dict[str, object]:

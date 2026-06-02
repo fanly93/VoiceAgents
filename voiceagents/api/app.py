@@ -34,7 +34,9 @@ from voiceagents.realtime.diagnostics import (
     build_realtime_dev_diagnostics,
 )
 from voiceagents.realtime.dashscope import (
+    build_dashscope_tool_result_messages,
     normalize_dashscope_event,
+    normalize_dashscope_tool_call,
     validate_dashscope_proxy_message,
 )
 from voiceagents.realtime.event_log import (
@@ -429,6 +431,16 @@ def create_app(
             normalize_provider_event=normalize_dashscope_event,
             event_repository=event_repository,
             transcript_logging_mode=_current_transcript_logging_mode(),
+            tool_router=tool_router,
+            normalize_tool_call=normalize_dashscope_tool_call,
+            build_tool_result_messages=build_dashscope_tool_result_messages,
+            tool_call_event_types=frozenset(
+                {
+                    "dashscope.tool_call.requested",
+                    "response.function_call_arguments.done",
+                }
+            ),
+            tool_result_event_type="dashscope.proxy.tool_result",
         )
         await coordinator.run(websocket)
 

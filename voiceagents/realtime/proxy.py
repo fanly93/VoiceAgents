@@ -10,16 +10,21 @@ from starlette.websockets import WebSocketDisconnect
 from voiceagents.realtime.contracts import (
     RealtimeEventIngestRequest,
     RealtimeProviderName,
+    RealtimeToolCallRequest,
+    RealtimeToolCallResponse,
     TranscriptLoggingMode,
     VoiceEvent,
 )
 from voiceagents.realtime.event_log import VoiceEventRepository
 from voiceagents.realtime.redaction import redact_text
 from voiceagents.realtime.session_store import InMemoryVoiceSessionStore, VoiceSessionNotFound
+from voiceagents.realtime.tool_router import RealtimeToolRouter
 
 
 ValidateProxyMessage = Callable[[object], dict[str, object]]
 NormalizeProviderEvent = Callable[..., RealtimeEventIngestRequest]
+NormalizeToolCall = Callable[..., RealtimeToolCallRequest]
+BuildToolResultMessages = Callable[..., list[Mapping[str, object]]]
 
 
 @dataclass
@@ -36,6 +41,11 @@ class RealtimeProxyCoordinator:
     normalize_provider_event: NormalizeProviderEvent | None = None
     event_repository: VoiceEventRepository | None = None
     transcript_logging_mode: TranscriptLoggingMode = TranscriptLoggingMode.STRUCTURED
+    tool_router: RealtimeToolRouter | None = None
+    normalize_tool_call: NormalizeToolCall | None = None
+    build_tool_result_messages: BuildToolResultMessages | None = None
+    tool_call_event_types: frozenset[str] = frozenset()
+    tool_result_event_type: str = "realtime.proxy.tool_result"
 
     async def run(self, websocket: WebSocket) -> None:
         if not self._authenticate():
@@ -75,6 +85,23 @@ class RealtimeProxyCoordinator:
             if self.upstream_transport is not None and self.normalize_provider_event is not None:
                 provider_event = await _send_upstream(self.upstream_transport, safe_message)
                 session = self.session_store.get_session(self.session_id)
+                if self._is_tool_call_event(provider_event):
+                    tool_response = self._execute_tool_call(provider_event, session)
+                    provider_call_id = _provider_call_id(provider_event)
+                    if self.build_tool_result_messages is not None:
+                        for provider_message in self.build_tool_result_messages(
+                            tool_response,
+                            provider_call_id=provider_call_id,
+                        ):
+                            await _send_upstream(self.upstream_transport, provider_message)
+                    await websocket.send_json(
+                        {
+                            "type": self.tool_result_event_type,
+                            "tool_name": tool_response.tool_name,
+                            "tool_status": tool_response.tool_status.value,
+                        }
+                    )
+                    continue
                 normalized_event = self.normalize_provider_event(
                     provider_event,
                     session_id=self.session_id,
@@ -105,6 +132,35 @@ class RealtimeProxyCoordinator:
             return False
         return provider_name is self.provider and token_is_valid
 
+    def _is_tool_call_event(self, provider_event: Mapping[str, object]) -> bool:
+        provider_event_type = provider_event.get("type")
+        return isinstance(provider_event_type, str) and provider_event_type in self.tool_call_event_types
+
+    def _execute_tool_call(
+        self,
+        provider_event: Mapping[str, object],
+        session,
+    ) -> RealtimeToolCallResponse:
+        if self.tool_router is None or self.normalize_tool_call is None or self.token is None:
+            raise RuntimeError("Realtime proxy tool routing is not configured")
+        request = self.normalize_tool_call(
+            provider_event,
+            session_id=self.session_id,
+            call_id=session.call_id,
+            merchant_id=session.merchant_id,
+        )
+        response = self.tool_router.execute(
+            request,
+            tool_call_token=self.token,
+            provider=self.provider,
+        )
+        self.session_store.append_tool_call(
+            request.session_id,
+            request.tool_name,
+            response.safe_summary,
+        )
+        return response
+
 
 async def _send_upstream(
     transport: object,
@@ -129,6 +185,14 @@ def _serialize_normalized_event(event: RealtimeEventIngestRequest) -> dict[str, 
         "speaker": event.speaker,
         "text": event.text,
     }
+
+
+def _provider_call_id(provider_event: Mapping[str, object]) -> str:
+    for field_name in ("call_id", "tool_call_id"):
+        value = provider_event.get(field_name)
+        if isinstance(value, str) and value:
+            return value
+    raise RuntimeError("Provider tool call event is missing call id")
 
 
 def _persist_normalized_event(
