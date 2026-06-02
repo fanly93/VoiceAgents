@@ -124,6 +124,8 @@ Rules:
 - if a new dependency is required for outbound WebSocket, it must be isolated behind the transport interface and documented in README or the manual checklist;
 - transport errors must become safe session/proxy errors and must not include Authorization headers, API keys, raw audio, raw provider payloads, or raw tool arguments.
 
+Dependency decision: implement the DashScope outbound WebSocket client with a lazy optional `websockets` import isolated inside `voiceagents/realtime/dashscope_transport.py`. The runtime can use the installed dependency for local real-provider smoke tests, while automated tests inject fake client factories and never call DashScope, require credentials, or open network sockets. If `websockets` is unavailable at runtime, the transport must fail with a safe dependency error that does not expose provider headers or API keys.
+
 ### Proxy Coordinator
 
 Replace the current inline DashScope fake relay in `voiceagents/api/app.py` with a provider-neutral coordinator or a thin DashScope wrapper around it.

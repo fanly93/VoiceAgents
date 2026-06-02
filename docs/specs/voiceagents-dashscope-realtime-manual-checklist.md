@@ -1,6 +1,6 @@
 # VoiceAgents DashScope Realtime Manual Checklist
 
-Status: DRAFT / REAL PROVIDER OUTBOUND DEFERRED
+Status: DRAFT / REAL PROVIDER OUTBOUND IMPLEMENTATION IN PROGRESS
 
 Use this checklist only after the fake-transport proxy tests pass. Do not commit real provider credentials, raw audio, SDP, Authorization headers, tool-call tokens, or unredacted transcripts.
 
@@ -39,7 +39,7 @@ VOICEAGENTS_DASHSCOPE_REALTIME_VOICE=...
 
 ## Manual Scope
 
-Current implementation exposes the browser-safe local proxy boundary and fake upstream relay. The real outbound DashScope WebSocket client dependency remains deferred until provider protocol details are verified manually.
+Current implementation exposes the browser-safe local proxy boundary, fake upstream relay, and server-side DashScope protocol mapping. The DashScope outbound WebSocket dependency decision is to isolate a lazy optional `websockets` import behind `voiceagents/realtime/dashscope_transport.py`; automated tests use fake clients and must not open network connections.
 
 Manual validation should confirm:
 
@@ -57,4 +57,4 @@ Stop and file a follow-up task if any of these happen:
 - a real provider key appears in browser state, DOM, logs, screenshots, reports, or committed files;
 - proxy envelope validation needs provider-specific fields that conflict with the current safety rules;
 - DashScope requires a client-side credential or browser-direct connection mode;
-- real outbound transport needs a new dependency or protocol loop beyond the fake-tested proxy interface.
+- real outbound transport requires network behavior that cannot be fake-tested through the transport interface.
