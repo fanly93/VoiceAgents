@@ -1,6 +1,6 @@
 # VoiceAgents Phase 2 Pilot Merchant Worksplit
 
-Status: DRAFT / OFFICE-HOURS INPUT
+Status: DECIDED / DEFERRED
 Date: 2026-06-02
 Branch: `feat/pilot-demo-report-sharing-auth`
 Related completed phase: local developer/test validation and report viewer
@@ -136,7 +136,21 @@ Deferred backend work should stay documented here, not implemented.
 
 ### Current Recommendation
 
-Default to Option B unless the user can name the concrete pilot stakeholder and the blocked decision.
+Decision on 2026-06-02: choose Option B. Defer Phase 2 backend work for now.
+
+Reason:
+
+- Phase 2 is primarily pilot merchant productization and frontend/report experience.
+- The backend team should not spend the current iteration building merchant-facing frontend surfaces.
+- There is not yet a concrete pilot merchant stakeholder or blocked decision that requires controlled report link access.
+- The current priority should return to backend developer/test tooling gaps from Phase 1.
+
+Revisit Phase 2 backend only when at least one trigger is true:
+
+- A named boss / merchant / decision-maker needs controlled access to a report outside the developer/tester's local machine.
+- Manual screenshot / WeChat / Feishu forwarding blocks a pilot decision.
+- The frontend team is ready to consume a report-sharing backend contract.
+- Security review decides local/manual sharing is unsafe for the next pilot.
 
 If we do proceed now, do only the backend contract and safety model. Do not build a merchant-facing frontend in this backend branch.
 

@@ -1,6 +1,6 @@
 # VoiceAgents Phase 3 Customer Support Worksplit
 
-Status: DRAFT / OFFICE-HOURS INPUT
+Status: DECIDED / DEFERRED
 Date: 2026-06-02
 Branch: `feat/pilot-demo-report-sharing-auth`
 Related completed phase: local developer/test validation and report viewer
@@ -131,7 +131,21 @@ Deferred backend work should stay documented here, not implemented.
 
 ### Current Recommendation
 
-Default to Option B unless the user can name a support operator / support lead who needs to handle real handoffs in the next pilot.
+Decision on 2026-06-02: choose Option B. Defer Phase 3 backend work for now.
+
+Reason:
+
+- Phase 3 is primarily customer support operations and support-team product workflow.
+- The backend team should not spend the current iteration building support-workbench frontend surfaces.
+- No real support operator / support lead is currently blocked on a live handoff queue.
+- The current priority should return to backend developer/test tooling gaps from Phase 1.
+
+Revisit Phase 3 backend only when at least one trigger is true:
+
+- A named support operator or support lead needs to receive real handoff context in the next pilot.
+- A pilot scenario requires live human takeover rather than demo handoff detection.
+- The frontend / support product team is ready to consume handoff lifecycle APIs.
+- Validation reports are no longer enough because operators need operational context.
 
 If we do proceed now, do only the backend handoff context contract and lifecycle API. Do not build a customer support workbench in this backend branch.
 

@@ -266,8 +266,8 @@ git diff --check
 ### Follow-up
 
 - Validation Harness v1 还没有 CLI。
-- Validation report viewer v1 只解决本地查看和 1-3 分钟 report prep；还没有 public sharing/auth 或生产 report portal。
-- 还没有客服后台接手页面。
+- Validation report viewer v1 只解决本地查看和 1-3 分钟 report prep；public sharing/auth 或生产 report portal 已记录为阶段 2，当前先后置。
+- 客服后台接手页面 / support workbench 已记录为阶段 3，当前先后置。
 - 真实浏览器自动化的 fake microphone 路线仍不稳定；真实语音验证仍建议用真实麦克风或手机播放辅助。
 
 ## 下一阶段建议
@@ -276,9 +276,10 @@ git diff --check
 
 推荐切口：
 
-1. Pilot demo report sharing/auth：在本地 viewer 之后，设计 public sharing、auth 和生产托管边界。
-2. Human handoff context viewer：把转人工上下文整理成客服可接手的结构。
-3. Validation scenario runner v2：把五个场景做成更明确的 guided workflow。
+1. Validation Harness CLI / Validation scenario runner v2：把五个场景做成更明确的 guided workflow，让研发/测试能更快启动、复跑、定位和复查验证结果。
+2. 真实语音验证排障辅助：继续收敛 fake microphone 不稳定时的可诊断输出，但不扩大到前端产品化。
+3. Pilot demo report sharing/auth：阶段 2，已在 `docs/roadmap/voiceagents-phase-2-pilot-merchant-worksplit.md` 记录分工，当前先后置。
+4. Human handoff context viewer / support workbench：阶段 3，已在 `docs/roadmap/voiceagents-phase-3-customer-support-worksplit.md` 记录分工，当前先后置。
 
 ## 新会话不要重复做的事
 
