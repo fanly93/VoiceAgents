@@ -1,5 +1,4 @@
 from datetime import datetime, timezone
-import inspect
 import os
 from pathlib import Path
 from urllib.parse import urlparse
@@ -8,7 +7,6 @@ import uuid
 from fastapi import Body, FastAPI, Header, HTTPException, Request, WebSocket
 from fastapi.responses import FileResponse
 from pydantic import ValidationError
-from starlette.websockets import WebSocketDisconnect
 
 from voiceagents.adapters.handoff import MockHandoffAdapter
 from voiceagents.adapters.knowledge import MockKnowledgeAdapter
@@ -36,7 +34,6 @@ from voiceagents.realtime.diagnostics import (
     build_realtime_dev_diagnostics,
 )
 from voiceagents.realtime.dashscope import (
-    DashScopeEventError,
     normalize_dashscope_event,
     validate_dashscope_proxy_message,
 )
@@ -53,6 +50,7 @@ from voiceagents.realtime.providers import (
     RealtimeProviderError,
     build_realtime_provider,
 )
+from voiceagents.realtime.proxy import RealtimeProxyCoordinator
 from voiceagents.realtime.redaction import redact_text
 from voiceagents.realtime.session_store import InMemoryVoiceSessionStore, VoiceSessionNotFound
 from voiceagents.realtime.tool_router import (
@@ -418,72 +416,19 @@ def create_app(
 
     @app.websocket("/v1/realtime/dashscope/proxy/{session_id}")
     async def dashscope_realtime_proxy(websocket: WebSocket, session_id: str) -> None:
-        token = websocket.query_params.get("token")
-        if token is None:
-            await websocket.close(code=1008, reason="Missing DashScope proxy token")
-            return
-        try:
-            provider_name = session_store.get_session_provider(session_id)
-            token_is_valid = session_store.verify_tool_call_token(session_id, token)
-        except VoiceSessionNotFound:
-            await websocket.close(code=1008, reason="Invalid DashScope proxy session")
-            return
-        if provider_name is not RealtimeProviderName.DASHSCOPE_REALTIME or not token_is_valid:
-            await websocket.close(code=1008, reason="Invalid DashScope proxy token")
-            return
-
-        await websocket.accept()
-        await websocket.send_json(
-            {
-                "type": "dashscope.proxy.ready",
-                "session_id": session_id,
-            }
+        coordinator = RealtimeProxyCoordinator(
+            session_store=session_store,
+            session_id=session_id,
+            token=websocket.query_params.get("token"),
+            provider=RealtimeProviderName.DASHSCOPE_REALTIME,
+            validate_message=validate_dashscope_proxy_message,
+            ready_event_type="dashscope.proxy.ready",
+            accepted_event_type="dashscope.proxy.accepted",
+            error_event_type="dashscope.proxy.error",
+            upstream_transport=dashscope_upstream_transport,
+            normalize_provider_event=normalize_dashscope_event,
         )
-        while True:
-            try:
-                message = await websocket.receive_json()
-            except WebSocketDisconnect:
-                return
-            try:
-                safe_message = validate_dashscope_proxy_message(message)
-            except DashScopeEventError:
-                await websocket.send_json(
-                    {
-                        "type": "dashscope.proxy.error",
-                        "error_code": "invalid_envelope",
-                    }
-                )
-                await websocket.close(code=1008, reason="Invalid DashScope proxy envelope")
-                return
-            await websocket.send_json(
-                {
-                    "type": "dashscope.proxy.accepted",
-                    "message_type": safe_message["type"],
-                }
-            )
-            if dashscope_upstream_transport is not None:
-                provider_event = await _send_dashscope_upstream(
-                    dashscope_upstream_transport,
-                    safe_message,
-                )
-                normalized_event = normalize_dashscope_event(
-                    provider_event,
-                    session_id=session_id,
-                    call_id=session_store.get_session(session_id).call_id,
-                    merchant_id=session_store.get_session(session_id).merchant_id,
-                )
-                await websocket.send_json(
-                    {
-                        "type": "dashscope.proxy.event",
-                        "event": {
-                            "provider": normalized_event.provider.value,
-                            "event_type": normalized_event.event_type.value,
-                            "state": normalized_event.state.value,
-                            "speaker": normalized_event.speaker,
-                            "text": normalized_event.text,
-                        },
-                    }
-                )
+        await coordinator.run(websocket)
 
     return app
 
@@ -618,18 +563,3 @@ def _parse_provider_expiry(expires_at: str | None) -> datetime | None:
         return datetime.fromisoformat(normalized)
     except ValueError:
         return None
-
-
-async def _send_dashscope_upstream(
-    transport: object,
-    message: dict[str, object],
-) -> dict[str, object]:
-    sender = getattr(transport, "send", None)
-    if sender is None:
-        raise RuntimeError("DashScope upstream transport must define send")
-    result = sender(message)
-    if inspect.isawaitable(result):
-        result = await result
-    if not isinstance(result, dict):
-        raise RuntimeError("DashScope upstream transport returned invalid event")
-    return result
