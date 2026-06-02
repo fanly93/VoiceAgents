@@ -1,12 +1,17 @@
+import json
 import pytest
 
+from voiceagents.contracts.common import HandoffReason, ToolErrorCode
 from voiceagents.realtime.contracts import (
     NormalizedRealtimeEventType,
     RealtimeProviderName,
+    RealtimeToolCallResponse,
+    RealtimeToolStatus,
     VoiceSessionState,
 )
 from voiceagents.realtime.dashscope import (
     DashScopeEventError,
+    build_dashscope_tool_result_event,
     normalize_dashscope_event,
     normalize_dashscope_tool_call,
 )
@@ -117,3 +122,36 @@ def test_dashscope_tool_call_event_rejects_unknown_tool() -> None:
             call_id="call-123",
             merchant_id="merchant-123",
         )
+
+
+def test_dashscope_tool_result_event_uses_safe_error_semantics() -> None:
+    provider_event = build_dashscope_tool_result_event(
+        RealtimeToolCallResponse(
+            ok=False,
+            tool_name="lookup_order",
+            result={},
+            safe_summary="I could not find that order.",
+            handoff_required=True,
+            handoff_reason=HandoffReason.TOOL_ERROR,
+            error_code=ToolErrorCode.NOT_FOUND,
+            tool_status=RealtimeToolStatus.FAILED,
+            error_message="I could not find that order.",
+        ),
+        provider_call_id="provider-tool-call-1",
+    )
+
+    assert provider_event == {
+        "type": "dashscope.tool_result",
+        "tool_call_id": "provider-tool-call-1",
+        "tool_name": "lookup_order",
+        "tool_status": "failed",
+        "output": {
+            "ok": False,
+            "safe_summary": "I could not find that order.",
+            "error_message": "I could not find that order.",
+            "error_code": "not_found",
+            "handoff_required": True,
+        },
+    }
+    assert "ORD-404" not in json.dumps(provider_event)
+    assert "arguments" not in provider_event

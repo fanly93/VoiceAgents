@@ -10,6 +10,7 @@ from voiceagents.realtime.contracts import (
     RealtimeEventIngestRequest,
     RealtimeProviderName,
     RealtimeToolCallRequest,
+    RealtimeToolCallResponse,
     VoiceSessionState,
     build_default_realtime_session_config,
 )
@@ -203,6 +204,29 @@ def normalize_dashscope_tool_call(
         tool_name=tool_name,
         arguments=dict(arguments),
     )
+
+
+def build_dashscope_tool_result_event(
+    response: RealtimeToolCallResponse,
+    *,
+    provider_call_id: str,
+) -> dict[str, object]:
+    output: dict[str, object] = {
+        "ok": response.ok,
+        "safe_summary": response.safe_summary,
+        "error_message": response.error_message,
+        "error_code": response.error_code.value if response.error_code is not None else None,
+        "handoff_required": response.handoff_required,
+    }
+    if response.ok:
+        output["result"] = response.result
+    return {
+        "type": "dashscope.tool_result",
+        "tool_call_id": provider_call_id,
+        "tool_name": response.tool_name,
+        "tool_status": response.tool_status.value,
+        "output": output,
+    }
 
 
 def _build_event(
