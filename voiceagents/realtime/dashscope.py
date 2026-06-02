@@ -10,8 +10,11 @@ from voiceagents.realtime.contracts import (
     RealtimeConnectionMode,
     RealtimeEventIngestRequest,
     RealtimeProviderName,
+    RealtimeSessionConfig,
+    RealtimeToolDefinition,
     RealtimeToolCallRequest,
     RealtimeToolCallResponse,
+    ResponseMode,
     VoiceSessionState,
     build_default_realtime_session_config,
 )
@@ -173,8 +176,24 @@ class DashScopeRealtimeAdapter:
             "api_key": "present" if self._config.has_api_key else "missing",
         }
 
-    def build_session_update_message(self, session_config) -> Mapping[str, object]:
-        raise NotImplementedError
+    def build_session_update_message(
+        self,
+        session_config: RealtimeSessionConfig,
+        *,
+        response_mode: ResponseMode = ResponseMode.VOICE,
+    ) -> Mapping[str, object]:
+        modalities = ["text"] if response_mode is ResponseMode.TEXT else ["audio", "text"]
+        session: dict[str, object] = {
+            "modalities": modalities,
+            "instructions": session_config.instructions,
+            "input_audio_format": "pcm16",
+            "output_audio_format": None if response_mode is ResponseMode.TEXT else "pcm16",
+            "turn_detection": {"type": "server_vad"},
+            "tools": _map_dashscope_tools(session_config.tools),
+        }
+        if response_mode is ResponseMode.VOICE and self._config.voice is not None:
+            session["voice"] = self._config.voice
+        return {"type": "session.update", "session": session}
 
     def map_browser_message(
         self,
@@ -273,6 +292,22 @@ def normalize_dashscope_event(
             text=_string_field(payload, "text"),
         )
     raise DashScopeEventError(f"Unsupported DashScope event: {provider_event_type}")
+
+
+def _map_dashscope_tools(tools: list[RealtimeToolDefinition]) -> list[dict[str, object]]:
+    mapped_tools: list[dict[str, object]] = []
+    for tool in tools:
+        if tool.name not in ALLOWED_REALTIME_TOOL_NAMES:
+            continue
+        mapped_tools.append(
+            {
+                "type": "function",
+                "name": tool.name,
+                "description": tool.description,
+                "parameters": tool.parameters_schema,
+            }
+        )
+    return mapped_tools
 
 
 def normalize_dashscope_tool_call(
