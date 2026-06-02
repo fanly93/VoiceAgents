@@ -137,7 +137,7 @@ Run the realtime smoke test against a running mock-mode server:
 ./.venv/bin/python scripts/smoke_realtime_api.py --base-url http://127.0.0.1:8000
 ```
 
-The realtime smoke script is intentionally mock-mode only. It validates `/health`, client-secret minting, the four approved tool calls, unknown tool rejection, and missing authorization rejection without requiring `OPENAI_API_KEY`. Real OpenAI voice verification is manual; use `docs/specs/voiceagents-openai-realtime-voice-mvp-manual-checklist.md` for the 3 minute `/realtime-test` run and browser failure-mode checks.
+The realtime smoke script is intentionally mock-mode only. It validates `/health`, client-secret minting, the four approved tool calls, unknown tool rejection, and missing authorization rejection without requiring `OPENAI_API_KEY`. Real OpenAI voice verification is manual; use `docs/specs/voiceagents-openai-realtime-voice-mvp-manual-checklist.md` for the 3 minute `/realtime-test` run and browser failure-mode checks. DashScope realtime proxy validation is documented in `docs/specs/voiceagents-dashscope-realtime-manual-checklist.md`; it currently covers the fake-tested `server_websocket_proxy` boundary and defers real outbound transport.
 
 Realtime tool-call responses include safe status semantics:
 
