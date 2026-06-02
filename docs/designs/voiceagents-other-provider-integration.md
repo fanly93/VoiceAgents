@@ -43,18 +43,26 @@ DashScope official documentation shows these relevant voice model families:
 | TTS quality/voice design | `cosyvoice-v3-flash`, `cosyvoice-v3-plus`, `cosyvoice-v3.5-*` | Useful later; `v3.5` is less suitable for v1 because it requires voice clone/design voices and does not support system voices. |
 | Non-realtime fallback | `qwen3-asr-flash`, `qwen3-asr-flash-filetrans`, `qwen3.5-omni-flash` | Useful for offline testing or fallback, not the first realtime voice path. |
 
-Other provider research:
+Other provider research, split by provider family:
+
+Native realtime voice providers:
 
 | Priority | Provider | Best fit |
 |---|---|---|
 | P0 | Volc/Doubao realtime voice | Domestic native realtime voice alternative with Function Calling support in its realtime conversation stack. |
-| P1 | MiniMax Speech | Strong TTS provider; not enough for full voice-agent loop by itself. |
-| P1 | iFlytek | Strong Chinese ASR and TTS; should be modeled as ASR/TTS adapters. |
-| P1 | Tencent Cloud | Enterprise ASR/TTS and TRTC integration; better as standard ASR/TTS or platform-specific realtime adapter. |
-| P1/P2 | Baidu Cloud | ASR/TTS and emerging speech-language model options; validate openness before native realtime priority. |
 | P0 global | Azure OpenAI Realtime | Global enterprise realtime provider, close to current OpenAI model but with Azure auth/deployment differences. |
 | P0/P1 global | Gemini Live | Native realtime multimodal and function calling; useful for multi-modal future. |
 | P0/P1 global | AWS Nova Sonic | Native speech-to-speech and tool use; likely higher implementation complexity because of AWS auth/streaming. |
+| P1/P2 | Baidu Cloud speech-language model | Potential native realtime option; validate public API openness before prioritizing. |
+
+Cascaded ASR/TTS providers:
+
+| Priority | Provider | Best fit |
+|---|---|---|
+| P1 | MiniMax Speech | Strong TTS provider; not enough for full voice-agent loop by itself. |
+| P1 | iFlytek | Strong Chinese ASR and TTS; should be modeled as ASR/TTS adapters. |
+| P1 | Tencent Cloud | Enterprise ASR/TTS and TRTC integration; better as standard ASR/TTS or platform-specific realtime adapter. |
+| P1/P2 | Baidu Cloud speech ASR/TTS | Useful ASR/TTS provider after native realtime priorities are stable. |
 
 Official references used during office-hours:
 
@@ -93,6 +101,16 @@ The provider abstraction should support these connection modes:
 - `cascaded_pipeline`: VoiceAgents coordinates separate ASR, LLM/tool, and TTS adapters.
 
 DashScope should not be browser-direct in v1 because WebSocket authentication requires a server-side `DASHSCOPE_API_KEY` and custom handshake headers. Qwen-Omni WebRTC may be useful later, but official access/whitelist and credential handling need validation first.
+
+DashScope v1 proxy contract should be explicit before implementation:
+
+- browser connects only to a VoiceAgents localhost/same-origin proxy URL;
+- the proxy authenticates the browser request with the session-bound `tool_call_token`;
+- VoiceAgents connects to DashScope with `DASHSCOPE_API_KEY` from server env;
+- browser-to-proxy messages carry browser-safe audio/control/tool-result payloads only;
+- proxy-to-browser messages carry normalized safe provider events and audio payloads needed for playback, but never provider secrets;
+- raw audio may pass through memory for realtime transport, but must not be written to logs or validation artifacts;
+- provider WebSocket dependency choice must be documented in the implementation task before the first code change.
 
 ## Tool Boundary
 

@@ -69,7 +69,24 @@ Required provider connection response concepts:
 - session config;
 - session-bound `tool_call_token`.
 
-The response must never expose long-lived provider API keys.
+The response must never expose long-lived provider API keys. Browser-safe ephemeral credentials are allowed for providers such as OpenAI Realtime, but they must be short-lived, returned only through the developer session response, and never rendered in the DOM, logs, validation artifacts, screenshots, or committed files.
+
+### Response Compatibility
+
+Keep `POST /v1/realtime/client-secret` for v1 compatibility, but make the response provider-neutral.
+
+The implementation should either extend the existing `RealtimeClientSecretResponse` or introduce a new DTO that preserves the existing response fields while adding:
+
+- `connection_mode`;
+- `ephemeral_credential`, if the provider exposes a browser-safe short-lived credential;
+- `connection_url` as either provider URL or local VoiceAgents proxy URL;
+- `credential_expires_at`, if different from the local `tool_call_token` expiry.
+
+Compatibility rules:
+
+- OpenAI can continue using `browser_webrtc_ephemeral` and a browser-safe ephemeral credential.
+- DashScope v1 must use `server_websocket_proxy` and must not return `DASHSCOPE_API_KEY`.
+- Existing tests that assert OpenAI client-secret behavior must keep passing.
 
 ### Provider Registry And Factory
 
@@ -113,6 +130,22 @@ server_websocket_proxy
 ```
 
 The browser must connect to a VoiceAgents local proxy endpoint. VoiceAgents then connects to DashScope using the server-side API key.
+
+DashScope proxy contract:
+
+- local proxy endpoint: exact route to be chosen before implementation, expected shape `GET /v1/realtime/proxy/{session_id}` or another explicit same-origin WebSocket route;
+- browser authentication: session-bound `tool_call_token`, never DashScope API key;
+- server authentication: `DASHSCOPE_API_KEY` read only from server env;
+- browser-to-proxy messages: audio input chunks or browser control events, with no provider secrets;
+- proxy-to-browser messages: normalized provider events, safe summaries, and browser-playable audio payloads when needed;
+- provider-to-VoiceAgents tool calls: mapped to `RealtimeToolRouter`;
+- VoiceAgents-to-provider tool results: provider-specific tool-result event generated from safe `RealtimeToolCallResponse`;
+- close/error behavior: provider disconnects become safe `session.error` or `session.ended` events;
+- test strategy: fake DashScope WebSocket transport first; no automated test may call DashScope.
+
+Dependency rule:
+
+- If implementation needs a WebSocket client dependency, the task must name it, add it deliberately, and include a focused test or smoke proving the proxy path still runs without real DashScope credentials.
 
 DashScope v1 must map:
 
@@ -174,7 +207,8 @@ Never expose or persist:
 - `DASHSCOPE_API_KEY`;
 - provider API keys from any provider;
 - AK/SK, SecretId/SecretKey, APISecret, access tokens, OAuth tokens;
-- client secret or long-lived provider credential;
+- long-lived provider credentials;
+- browser-safe ephemeral credentials after the initial session response;
 - `tool_call_token`;
 - Authorization headers;
 - SDP;
@@ -215,14 +249,19 @@ All provider errors returned to the browser or logs must be safe summaries.
 
 ## Provider Priority
 
-Implementation priority after DashScope:
+Native realtime voice priority after DashScope:
 
 1. Volc/Doubao native realtime voice.
-2. MiniMax TTS adapter.
-3. iFlytek ASR adapter.
-4. Azure OpenAI Realtime provider.
-5. Gemini Live provider.
-6. AWS Nova Sonic provider.
-7. Tencent/Baidu ASR/TTS adapters.
+2. Azure OpenAI Realtime provider.
+3. Gemini Live provider.
+4. AWS Nova Sonic provider.
+5. Baidu speech-language native realtime provider if public API access is confirmed.
+
+Cascaded ASR/TTS adapter priority:
+
+1. MiniMax TTS adapter.
+2. iFlytek ASR adapter.
+3. Tencent ASR/TTS adapter.
+4. Baidu ASR/TTS adapter.
 
 This priority can change if account access, model availability, cost, or pilot customer requirements change.
