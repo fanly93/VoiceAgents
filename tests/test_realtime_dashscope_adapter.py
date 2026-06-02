@@ -19,6 +19,7 @@ from voiceagents.realtime.dashscope import (
     build_dashscope_tool_result_event,
     normalize_dashscope_event,
     normalize_dashscope_tool_call,
+    validate_dashscope_proxy_message,
 )
 from voiceagents.realtime.outbound import RealtimeOutboundEvent, RealtimeOutboundEventKind
 from voiceagents.realtime.outbound import (
@@ -89,6 +90,13 @@ def test_dashscope_adapter_builds_authorization_headers_without_safe_leakage() -
         "api_key": "present",
     }
     assert "dashscope-secret" not in json.dumps(adapter.safe_connection_summary())
+
+
+def test_dashscope_proxy_message_validation_rejects_raw_audio_key() -> None:
+    with pytest.raises(DashScopeEventError, match="raw_audio"):
+        validate_dashscope_proxy_message(
+            {"type": "audio", "payload": {"raw_audio": "base64-provider-audio"}}
+        )
 
 
 def test_dashscope_adapter_rejects_missing_api_key_for_headers() -> None:

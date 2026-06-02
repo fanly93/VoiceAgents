@@ -684,6 +684,10 @@
               appendPanel("tool-calls", `${payload.tool_name}: ${payload.tool_status}`);
               return;
             }
+            if (payload.type === "dashscope.proxy.audio") {
+              appendPanel("provider-events", "dashscope.proxy.audio");
+              return;
+            }
             if (payload.type === "dashscope.proxy.event" && payload.event) {
               renderNormalizedEvent(payload.event);
             }

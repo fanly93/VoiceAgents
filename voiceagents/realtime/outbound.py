@@ -114,7 +114,6 @@ class RealtimeOutboundTransport(Protocol):
 
 
 @runtime_checkable
-@runtime_checkable
 class NativeRealtimeProviderAdapter(Protocol):
     def build_connection_url(self) -> str:
         ...

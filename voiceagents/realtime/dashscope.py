@@ -60,6 +60,7 @@ BLOCKED_DASHSCOPE_PROXY_KEYS = {
     "client_secret",
     "dashscope_api_key",
     "raw_arguments",
+    "raw_audio",
     "sdp",
     "tool_call_token",
 }

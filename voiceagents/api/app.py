@@ -38,7 +38,6 @@ from voiceagents.realtime.dashscope import (
     DashScopeRealtimeAdapter,
     DashScopeRealtimeConfig,
     build_dashscope_tool_result_messages,
-    normalize_dashscope_event,
     normalize_dashscope_tool_call,
     validate_dashscope_proxy_message,
 )
@@ -447,7 +446,7 @@ def create_app(
             map_browser_message=_build_dashscope_browser_message_mapper()
             if dashscope_upstream_transport is None
             else None,
-            normalize_provider_event=normalize_dashscope_event,
+            normalize_provider_event=_build_dashscope_provider_event_normalizer(),
             event_repository=event_repository,
             transcript_logging_mode=_current_transcript_logging_mode(),
             tool_router=tool_router,
@@ -582,6 +581,12 @@ def _build_dashscope_browser_message_mapper() -> Callable[[dict[str, object]], o
         return None
     adapter = DashScopeRealtimeAdapter(config)
     return adapter.map_browser_message
+
+
+def _build_dashscope_provider_event_normalizer() -> Callable[..., object]:
+    config = DashScopeRealtimeConfig.from_env(os.environ)
+    adapter = DashScopeRealtimeAdapter(config)
+    return adapter.normalize_provider_event
 
 
 def _extract_bearer_token(authorization: str | None) -> str:

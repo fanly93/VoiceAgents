@@ -19,6 +19,7 @@ def test_realtime_test_page_dashscope_proxy_flow_is_server_persisted() -> None:
         1,
     )[0]
     assert "dashscope.proxy.event" in dashscope_block
+    assert "dashscope.proxy.audio" in dashscope_block
     assert "dashscope.proxy.tool_result" in dashscope_block
     assert "renderNormalizedEvent(payload.event)" in dashscope_block
     assert "relayNormalizedEvent(payload.event)" not in dashscope_block

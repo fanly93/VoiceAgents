@@ -117,6 +117,34 @@ class FakeDashScopeToolTransport:
         }
 
 
+class FakeDashScopeAudioTransport:
+    def __init__(self) -> None:
+        self.messages: list[dict[str, object]] = []
+
+    async def send(self, message: dict[str, object]) -> dict[str, object]:
+        self.messages.append(message)
+        return {"type": "response.audio.delta", "delta": "cGNtMTY="}
+
+
+class FakeWaitingDuplexDashScopeTransport:
+    def __init__(self) -> None:
+        self.messages: list[dict[str, object]] = []
+
+    async def connect(self) -> None:
+        return None
+
+    async def send_json(self, message: dict[str, object]) -> None:
+        self.messages.append(message)
+
+    async def receive(self) -> object:
+        import asyncio
+
+        await asyncio.Event().wait()
+
+    async def close(self) -> None:
+        return None
+
+
 class FakeClosableDashScopeTransport(FakeDashScopeUpstreamTransport):
     def __init__(self) -> None:
         super().__init__()
@@ -336,6 +364,82 @@ def test_dashscope_proxy_persists_provider_events_server_side_once() -> None:
     assert len(event_repository.events) == 1
     assert event_repository.events[0].event_type == "transcript.assistant.delta"
     assert event_repository.events[0].response_text_redacted == "Checking that order."
+
+
+def test_dashscope_proxy_duplex_transport_accepts_next_browser_frame_without_provider_event(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("VOICEAGENTS_DASHSCOPE_API_KEY", "dashscope-secret")
+    transport = FakeWaitingDuplexDashScopeTransport()
+    client, token = create_dashscope_session_with_transport_factory(lambda: transport)
+
+    with client.websocket_connect(
+        f"/v1/realtime/dashscope/proxy/session-123?token={token}"
+    ) as websocket:
+        websocket.receive_json()
+        websocket.send_json({"type": "control", "payload": {"action": "start"}})
+        assert websocket.receive_json() == {
+            "type": "dashscope.proxy.accepted",
+            "message_type": "control",
+        }
+        websocket.send_json({"type": "audio", "payload": {"frame": "cGNtMTY="}})
+        assert websocket.receive_json() == {
+            "type": "dashscope.proxy.accepted",
+            "message_type": "audio",
+        }
+
+    assert transport.messages[0]["type"] == "session.update"
+    assert transport.messages[1] == {
+        "type": "input_audio_buffer.append",
+        "audio": "cGNtMTY=",
+    }
+
+
+def test_dashscope_proxy_relays_audio_delta_without_persisting_provider_event() -> None:
+    transport = FakeDashScopeAudioTransport()
+    event_repository = InMemoryVoiceEventRepository()
+    client, token = create_dashscope_session_with_transport_and_events(
+        transport,
+        event_repository,
+    )
+
+    with client.websocket_connect(
+        f"/v1/realtime/dashscope/proxy/session-123?token={token}"
+    ) as websocket:
+        websocket.receive_json()
+        websocket.send_json({"type": "control", "payload": {"action": "start"}})
+        websocket.receive_json()
+
+        assert websocket.receive_json() == {
+            "type": "dashscope.proxy.audio",
+            "audio": "cGNtMTY=",
+        }
+
+    assert transport.messages == [{"type": "control", "payload": {"action": "start"}}]
+    assert event_repository.events == []
+
+
+def test_dashscope_proxy_persists_provider_tool_calls_once() -> None:
+    transport = FakeDashScopeToolTransport()
+    event_repository = InMemoryVoiceEventRepository()
+    client, token = create_dashscope_session_with_transport_and_events(
+        transport,
+        event_repository,
+    )
+
+    with client.websocket_connect(
+        f"/v1/realtime/dashscope/proxy/session-123?token={token}"
+    ) as websocket:
+        websocket.receive_json()
+        websocket.send_json({"type": "control", "payload": {"action": "start"}})
+        websocket.receive_json()
+        websocket.receive_json()
+
+    tool_events = [event for event in event_repository.events if event.event_type == "tool_call"]
+    assert len(tool_events) == 1
+    assert tool_events[0].tool_name == "lookup_order"
+    assert tool_events[0].provider_event_type == "response.function_call_arguments.done"
+    assert tool_events[0].provider_call_id == "provider-tool-call-1"
 
 
 def test_dashscope_proxy_routes_provider_tool_call_and_sends_result_to_provider() -> None:
