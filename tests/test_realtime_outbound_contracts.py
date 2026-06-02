@@ -2,10 +2,12 @@ import pytest
 from pydantic import ValidationError
 
 from voiceagents.realtime.outbound import (
+    NativeRealtimeProviderAdapter,
     RealtimeBrowserProxyMessage,
     RealtimeBrowserProxyMessageType,
     RealtimeOutboundEvent,
     RealtimeOutboundEventKind,
+    RealtimeOutboundTransport,
     RealtimeSafeProviderError,
 )
 
@@ -106,3 +108,38 @@ def test_safe_provider_error_does_not_expose_secrets_or_raw_payloads() -> None:
             provider_event_type="error",
             raw_payload={"api_key": "provider-secret"},
         )
+
+
+def test_transport_protocol_names_required_async_boundary() -> None:
+    protocol_members = RealtimeOutboundTransport.__protocol_attrs__
+
+    assert {
+        "connect",
+        "send_json",
+        "send_audio",
+        "receive",
+        "close",
+    }.issubset(protocol_members)
+
+
+def test_native_provider_adapter_protocol_covers_provider_mapping_boundary() -> None:
+    protocol_members = NativeRealtimeProviderAdapter.__protocol_attrs__
+
+    assert {
+        "build_connection_url",
+        "build_headers",
+        "build_session_update_message",
+        "map_browser_message",
+        "normalize_provider_event",
+        "normalize_provider_tool_call",
+        "build_tool_result_messages",
+        "safe_connection_summary",
+    }.issubset(protocol_members)
+
+
+def test_native_provider_adapter_protocol_has_no_secret_return_field() -> None:
+    protocol_members = NativeRealtimeProviderAdapter.__protocol_attrs__
+
+    assert "api_key" not in protocol_members
+    assert "authorization" not in protocol_members
+    assert "client_secret" not in protocol_members
