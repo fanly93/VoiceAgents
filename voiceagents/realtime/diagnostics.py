@@ -8,6 +8,7 @@ from voiceagents.realtime.contracts import RealtimeProviderName, TranscriptLoggi
 from voiceagents.realtime.providers import (
     DEFAULT_OPENAI_REALTIME_MODEL,
     DEFAULT_OPENAI_REALTIME_VOICE,
+    get_realtime_provider_capabilities,
 )
 
 
@@ -38,6 +39,7 @@ def build_realtime_dev_diagnostics(
     source = env if env is not None else os.environ
     provider = source.get("VOICEAGENTS_REALTIME_PROVIDER", RealtimeProviderName.MOCK.value)
     checks = [_check_provider_supported(provider)]
+    capabilities = get_realtime_provider_capabilities()
 
     if provider == RealtimeProviderName.OPENAI_REALTIME.value:
         checks.extend(
@@ -48,8 +50,16 @@ def build_realtime_dev_diagnostics(
                 _check_openai_voice(source),
             ]
         )
+    elif provider in {provider_name.value for provider_name in capabilities}:
+        capability = capabilities[RealtimeProviderName(provider)]
+        checks.append(
+            _pass_check(
+                "provider_model",
+                f"Realtime provider model is configured as {capability.default_model}.",
+            )
+        )
     else:
-        checks.append(_pass_check("openai_model", "OpenAI model is not used in mock mode."))
+        pass
 
     checks.extend(
         [
@@ -65,7 +75,7 @@ def build_realtime_dev_diagnostics(
 
 
 def _check_provider_supported(provider: str) -> RealtimeDiagnosticsCheck:
-    allowed = {item.value for item in RealtimeProviderName}
+    allowed = {item.value for item in get_realtime_provider_capabilities()}
     if provider in allowed:
         return _pass_check(
             "provider_supported",
@@ -76,7 +86,10 @@ def _check_provider_supported(provider: str) -> RealtimeDiagnosticsCheck:
         status="fail",
         summary="Realtime provider is not supported.",
         detail=f"Configured provider is '{provider}'.",
-        remediation="Set VOICEAGENTS_REALTIME_PROVIDER to mock or openai_realtime.",
+        remediation=(
+            "Set VOICEAGENTS_REALTIME_PROVIDER to one of: "
+            f"{', '.join(sorted(allowed))}."
+        ),
     )
 
 
@@ -167,4 +180,3 @@ def _overall_status(checks: list[RealtimeDiagnosticsCheck]) -> DiagnosticsStatus
     if any(check.status == "warn" for check in checks):
         return "warn"
     return "pass"
-

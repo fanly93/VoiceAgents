@@ -19,14 +19,14 @@ def test_realtime_dev_diagnostics_endpoint_returns_mock_pass(monkeypatch) -> Non
     assert body["provider"] == "mock"
     assert {check["name"] for check in body["checks"]} >= {
         "provider_supported",
-        "openai_model",
+        "provider_model",
         "transcript_logging",
         "client_secret_rate_limit",
     }
 
 
 def test_realtime_dev_diagnostics_endpoint_reports_unsupported_provider(monkeypatch) -> None:
-    monkeypatch.setenv("VOICEAGENTS_REALTIME_PROVIDER", "dashscope_realtime")
+    monkeypatch.setenv("VOICEAGENTS_REALTIME_PROVIDER", "unknown_provider")
     client = TestClient(create_app())
 
     response = client.get("/v1/realtime/dev-diagnostics", headers=LOCAL_ORIGIN)
@@ -34,10 +34,27 @@ def test_realtime_dev_diagnostics_endpoint_reports_unsupported_provider(monkeypa
     assert response.status_code == 200
     body = response.json()
     assert body["overall_status"] == "fail"
-    assert body["provider"] == "dashscope_realtime"
+    assert body["provider"] == "unknown_provider"
     assert next(check for check in body["checks"] if check["name"] == "provider_supported")[
         "status"
     ] == "fail"
+
+
+def test_realtime_dev_diagnostics_endpoint_reports_dashscope_supported(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("VOICEAGENTS_REALTIME_PROVIDER", "dashscope_realtime")
+    client = TestClient(create_app())
+
+    response = client.get("/v1/realtime/dev-diagnostics", headers=LOCAL_ORIGIN)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["provider"] == "dashscope_realtime"
+    assert next(check for check in body["checks"] if check["name"] == "provider_supported")[
+        "status"
+    ] == "pass"
+    assert "openai_model" not in {check["name"] for check in body["checks"]}
 
 
 def test_realtime_dev_diagnostics_endpoint_reports_openai_gate_and_key_without_leak(
