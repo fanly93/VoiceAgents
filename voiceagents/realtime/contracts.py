@@ -55,6 +55,12 @@ class TranscriptLoggingMode(StrEnum):
     TRANSCRIPT = "transcript"
 
 
+class RealtimeToolStatus(StrEnum):
+    COMPLETED = "completed"
+    FAILED = "failed"
+    HANDOFF_REQUIRED = "handoff_required"
+
+
 DEFAULT_TRANSCRIPT_LOGGING_MODE = TranscriptLoggingMode.STRUCTURED
 
 
@@ -262,6 +268,8 @@ class RealtimeToolCallResponse(BaseModel):
     handoff_required: bool
     handoff_reason: HandoffReason
     error_code: ToolErrorCode | None
+    tool_status: RealtimeToolStatus
+    error_message: str | None
 
 
 class VoiceEvent(BaseModel):

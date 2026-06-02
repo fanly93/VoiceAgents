@@ -728,6 +728,10 @@
         if (!response.ok) {
           throw new Error(`Tool call failed: ${response.status}`);
         }
+        if (!payload.ok) {
+          appendPanel("provider-events", `tool_error=${payload.tool_status || "failed"} ${payload.error_code || "unknown"}`);
+          throw new Error(`Tool call failed safely: ${payload.error_message || payload.safe_summary || "safe backend error"}`);
+        }
         writePanel("latency", `${Math.round(performance.now() - startedAt)} ms`);
         appendPanel("tool-calls", `${toolName}: ${payload.safe_summary || response.status}`);
         if (payload.handoff_required) {
@@ -793,7 +797,7 @@
             state: toolResponse.handoff_required ? "handoff_pending" : "tool_calling",
             tool_name: normalized.tool_name,
             provider_call_id: normalized.provider_call_id,
-            tool_status: "completed",
+            tool_status: toolResponse.tool_status,
             safe_summary: toolResponse.safe_summary,
             provider_event_type: "voiceagents.tool_call.result",
           });

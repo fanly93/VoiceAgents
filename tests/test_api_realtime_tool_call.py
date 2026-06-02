@@ -56,8 +56,36 @@ def test_realtime_tool_call_endpoint_routes_known_tool(monkeypatch) -> None:
     assert body["tool_name"] == "lookup_order"
     assert body["result"] == {"order_status": "paid"}
     assert event_repository.events[-1].event_type == "tool_call"
+    assert event_repository.events[-1].tool_status == "completed"
     assert event_repository.events[-1].tool_result_summary == "Order ORD-20260601-1842 has been paid."
     assert event_repository.events[-1].tool_arguments_redacted is None
+
+
+def test_realtime_tool_call_endpoint_logs_failed_tool_status(monkeypatch) -> None:
+    monkeypatch.setenv("VOICEAGENTS_REALTIME_PROVIDER", "mock")
+    client, event_repository = make_client()
+    token = create_session_and_token(client)
+
+    response = client.post(
+        "/v1/realtime/tool-call",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "session_id": "session-123",
+            "call_id": "call-123",
+            "merchant_id": "merchant-123",
+            "tool_name": "lookup_order",
+            "arguments": {"order_id": "ORD-404"},
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is False
+    assert body["tool_status"] == "failed"
+    assert body["error_message"] == "I could not find that order."
+    assert "ORD-404" not in body["error_message"]
+    assert event_repository.events[-1].tool_status == "failed"
+    assert event_repository.events[-1].tool_result_summary == "I could not find that order."
 
 
 def test_realtime_tool_call_endpoint_does_not_persist_raw_arguments(
@@ -202,6 +230,11 @@ def test_realtime_tool_call_endpoint_rejects_unknown_tool(monkeypatch) -> None:
     )
 
     assert response.status_code == 400
+    assert response.json()["detail"] == {
+        "error_code": "unknown_tool",
+        "message": "Unknown realtime tool.",
+        "tool_name": "run_shell",
+    }
 
 
 def test_realtime_tool_call_endpoint_rejects_invalid_arguments(monkeypatch) -> None:
@@ -222,6 +255,11 @@ def test_realtime_tool_call_endpoint_rejects_invalid_arguments(monkeypatch) -> N
     )
 
     assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert detail["error_code"] == "invalid_arguments"
+    assert detail["message"] == "Invalid realtime tool arguments."
+    assert detail["tool_name"] == "lookup_order"
+    assert "order_id" not in json.dumps(detail)
 
 
 def test_realtime_tool_call_endpoint_handoff_updates_state(monkeypatch) -> None:

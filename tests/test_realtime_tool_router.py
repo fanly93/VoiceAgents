@@ -16,6 +16,11 @@ from voiceagents.realtime.tool_router import (
 )
 
 
+class FailingOrderAdapter:
+    def lookup_order(self, request):
+        raise RuntimeError("database password leaked in exception")
+
+
 def make_store_with_session() -> tuple[InMemoryVoiceSessionStore, str]:
     store = InMemoryVoiceSessionStore()
     created = store.create_session(
@@ -147,6 +152,31 @@ def test_tool_router_routes_order_lookup() -> None:
     assert response.safe_summary == "Order ORD-20260601-1842 has been paid."
     assert response.handoff_required is False
     assert response.handoff_reason is HandoffReason.NONE
+    assert response.tool_status == "completed"
+    assert response.error_message is None
+
+
+def test_tool_router_returns_safe_failed_order_lookup_for_missing_order() -> None:
+    store, token = make_store_with_session()
+    router = make_router_with_adapters(store)
+
+    response = router.execute(
+        RealtimeToolCallRequest(
+            session_id="session-123",
+            call_id="call-123",
+            merchant_id="merchant-123",
+            tool_name="lookup_order",
+            arguments={"order_id": "ORD-404"},
+        ),
+        tool_call_token=token,
+    )
+
+    assert response.ok is False
+    assert response.tool_status == "failed"
+    assert response.safe_summary == "I could not find that order."
+    assert response.error_code == "not_found"
+    assert response.error_message == "I could not find that order."
+    assert "ORD-404" not in response.error_message
 
 
 def test_tool_router_routes_logistics_lookup() -> None:
@@ -169,6 +199,7 @@ def test_tool_router_routes_logistics_lookup() -> None:
     assert response.result["status"] == "in_transit"
     assert response.handoff_required is False
     assert response.handoff_reason is HandoffReason.NONE
+    assert response.tool_status == "completed"
 
 
 def test_tool_router_routes_product_knowledge() -> None:
@@ -191,6 +222,29 @@ def test_tool_router_routes_product_knowledge() -> None:
     assert "cool water" in response.safe_summary
     assert response.handoff_required is False
     assert response.handoff_reason is HandoffReason.NONE
+    assert response.tool_status == "completed"
+
+
+def test_tool_router_marks_low_confidence_knowledge_as_handoff_required() -> None:
+    store, token = make_store_with_session()
+    router = make_router_with_adapters(store)
+
+    response = router.execute(
+        RealtimeToolCallRequest(
+            session_id="session-123",
+            call_id="call-123",
+            merchant_id="merchant-123",
+            tool_name="query_product_knowledge",
+            arguments={"query": "Do you know the private supplier contract?", "locale": "en-US"},
+        ),
+        tool_call_token=token,
+    )
+
+    assert response.ok is False
+    assert response.tool_status == "handoff_required"
+    assert response.handoff_required is True
+    assert response.handoff_reason is HandoffReason.RAG_LOW_CONFIDENCE
+    assert response.error_message == response.safe_summary
 
 
 def test_tool_router_routes_handoff_to_human_and_marks_session() -> None:
@@ -212,7 +266,27 @@ def test_tool_router_routes_handoff_to_human_and_marks_session() -> None:
     )
 
     assert response.ok is True
+    assert response.tool_status == "handoff_required"
     assert response.handoff_required is True
     assert response.handoff_reason is HandoffReason.CUSTOMER_REQUESTS_HUMAN
     assert response.result["handoff_id"] == "HND-20260601-0007"
     assert store.get_session("session-123").handoff_reason is HandoffReason.CUSTOMER_REQUESTS_HUMAN
+
+
+def test_tool_router_converts_adapter_exception_to_safe_system_error() -> None:
+    store, token = make_store_with_session()
+    router = RealtimeToolRouter(
+        session_store=store,
+        order_adapter=FailingOrderAdapter(),
+    )
+
+    response = router.execute(make_tool_call_request(), tool_call_token=token)
+
+    assert response.ok is False
+    assert response.tool_status == "failed"
+    assert response.error_code == "system_error"
+    assert response.handoff_required is True
+    assert response.handoff_reason is HandoffReason.TOOL_ERROR
+    assert "temporary problem" in response.safe_summary
+    assert response.error_message == response.safe_summary
+    assert "database password" not in response.model_dump_json()

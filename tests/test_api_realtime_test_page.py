@@ -208,7 +208,7 @@ def test_realtime_test_page_loads_openai_adapter_and_relays_normalized_events() 
     assert "client_secret" not in html.split('fetch("/v1/realtime/event"', 1)[1]
     assert "raw_audio" not in html.split('fetch("/v1/realtime/event"', 1)[1]
     assert 'event_type: "tool_call.result"' in html
-    assert 'tool_status: "completed"' in html
+    assert "tool_status: toolResponse.tool_status" in html
     assert "safe_summary: toolResponse.safe_summary" in html
     assert "isAllowedRealtimeTool" in html
     assert "return;" in html.split("if (!isAllowedRealtimeTool", 1)[1]
@@ -251,6 +251,8 @@ def test_realtime_test_page_does_not_send_failed_tool_calls_to_provider() -> Non
 
     assert "if (!response.ok)" in html.split("async function relayToolCall", 1)[1]
     assert "throw new Error(`Tool call failed: ${response.status}`)" in html
+    assert "if (!payload.ok)" in html.split("async function relayToolCall", 1)[1]
+    assert "Tool call failed safely" in html
 
 
 def test_realtime_test_page_handles_webrtc_error_and_cleanup_paths() -> None:
