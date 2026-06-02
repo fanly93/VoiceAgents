@@ -182,7 +182,7 @@ def test_dashscope_official_session_and_response_events_normalize() -> None:
 
     assert connected.event_type is NormalizedRealtimeEventType.SESSION_CONNECTED
     assert connected.provider_event_type == "session.created"
-    assert connected.provider_call_id == "provider-call-1"
+    assert connected.provider_call_id is None
     assert done.event_type is NormalizedRealtimeEventType.RESPONSE_DONE
     assert done.state is VoiceSessionState.LISTENING
 

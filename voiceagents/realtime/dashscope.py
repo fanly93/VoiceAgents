@@ -1,5 +1,8 @@
+import base64
+import binascii
 from collections.abc import Mapping
 from dataclasses import dataclass
+import json
 from urllib.parse import quote
 
 from voiceagents.realtime.contracts import (
@@ -19,6 +22,7 @@ from voiceagents.realtime.contracts import (
     build_default_realtime_session_config,
 )
 from voiceagents.realtime.outbound import RealtimeBrowserProxyMessage
+from voiceagents.realtime.outbound import RealtimeOutboundEvent, RealtimeOutboundEventKind
 
 
 DEFAULT_DASHSCOPE_REALTIME_MODEL = "qwen3.5-omni-flash-realtime"
@@ -209,6 +213,11 @@ class DashScopeRealtimeAdapter:
         call_id: str,
         merchant_id: str,
     ):
+        if _string_field(payload, "type") == "response.audio.delta":
+            return RealtimeOutboundEvent(
+                kind=RealtimeOutboundEventKind.AUDIO,
+                audio=_decode_base64_audio(_string_field(payload, "delta")),
+            )
         return normalize_dashscope_event(
             payload,
             session_id=session_id,
@@ -248,7 +257,7 @@ def normalize_dashscope_event(
     merchant_id: str,
 ) -> RealtimeEventIngestRequest:
     provider_event_type = _string_field(payload, "type")
-    if provider_event_type == "dashscope.session.started":
+    if provider_event_type in {"dashscope.session.started", "session.created"}:
         return _build_event(
             session_id=session_id,
             call_id=call_id,
@@ -268,7 +277,7 @@ def normalize_dashscope_event(
             provider_event_type=provider_event_type,
             provider_call_id=None,
         )
-    if provider_event_type == "dashscope.session.error":
+    if provider_event_type in {"dashscope.session.error", "error"}:
         return _build_event(
             session_id=session_id,
             call_id=call_id,
@@ -290,6 +299,52 @@ def normalize_dashscope_event(
             provider_call_id=None,
             speaker=speaker,
             text=_string_field(payload, "text"),
+        )
+    if provider_event_type == "conversation.item.input_audio_transcription.completed":
+        return _build_event(
+            session_id=session_id,
+            call_id=call_id,
+            merchant_id=merchant_id,
+            event_type=NormalizedRealtimeEventType.TRANSCRIPT_USER_DONE,
+            state=VoiceSessionState.THINKING,
+            provider_event_type=provider_event_type,
+            provider_call_id=None,
+            speaker="user",
+            text=_string_field(payload, "transcript"),
+        )
+    if provider_event_type == "response.output_audio_transcript.delta":
+        return _build_event(
+            session_id=session_id,
+            call_id=call_id,
+            merchant_id=merchant_id,
+            event_type=NormalizedRealtimeEventType.TRANSCRIPT_ASSISTANT_DELTA,
+            state=VoiceSessionState.SPEAKING,
+            provider_event_type=provider_event_type,
+            provider_call_id=None,
+            speaker="assistant",
+            text=_string_field(payload, "delta"),
+        )
+    if provider_event_type == "response.output_audio_transcript.done":
+        return _build_event(
+            session_id=session_id,
+            call_id=call_id,
+            merchant_id=merchant_id,
+            event_type=NormalizedRealtimeEventType.TRANSCRIPT_ASSISTANT_DONE,
+            state=VoiceSessionState.LISTENING,
+            provider_event_type=provider_event_type,
+            provider_call_id=None,
+            speaker="assistant",
+            text=_string_field(payload, "transcript"),
+        )
+    if provider_event_type == "response.done":
+        return _build_event(
+            session_id=session_id,
+            call_id=call_id,
+            merchant_id=merchant_id,
+            event_type=NormalizedRealtimeEventType.RESPONSE_DONE,
+            state=VoiceSessionState.LISTENING,
+            provider_event_type=provider_event_type,
+            provider_call_id=None,
         )
     raise DashScopeEventError(f"Unsupported DashScope event: {provider_event_type}")
 
@@ -318,12 +373,25 @@ def normalize_dashscope_tool_call(
     merchant_id: str,
 ) -> RealtimeToolCallRequest:
     provider_event_type = _string_field(payload, "type")
-    if provider_event_type != "dashscope.tool_call.requested":
+    if provider_event_type not in {
+        "dashscope.tool_call.requested",
+        "response.function_call_arguments.done",
+    }:
         raise DashScopeEventError(f"Unsupported DashScope tool event: {provider_event_type}")
-    tool_name = _string_field(payload, "tool_name")
+    tool_name = (
+        _string_field(payload, "name")
+        if provider_event_type == "response.function_call_arguments.done"
+        else _string_field(payload, "tool_name")
+    )
     if tool_name not in ALLOWED_REALTIME_TOOL_NAMES:
         raise DashScopeEventError(f"Unsupported DashScope tool: {tool_name}")
     arguments = payload.get("arguments")
+    if isinstance(arguments, str):
+        try:
+            parsed_arguments = json.loads(arguments)
+        except json.JSONDecodeError as error:
+            raise DashScopeEventError("DashScope tool call arguments must be valid JSON") from error
+        arguments = parsed_arguments
     if not isinstance(arguments, dict):
         raise DashScopeEventError("DashScope tool call arguments must be an object")
     return RealtimeToolCallRequest(
@@ -416,3 +484,10 @@ def _string_field(payload: Mapping[str, object], name: str) -> str:
     if not isinstance(value, str) or not value:
         raise DashScopeEventError(f"DashScope event missing {name}")
     return value
+
+
+def _decode_base64_audio(value: str) -> bytes:
+    try:
+        return base64.b64decode(value, validate=True)
+    except (binascii.Error, ValueError) as error:
+        raise DashScopeEventError("DashScope audio delta must be valid base64") from error
