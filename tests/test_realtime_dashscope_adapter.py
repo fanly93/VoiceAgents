@@ -21,6 +21,10 @@ from voiceagents.realtime.dashscope import (
     normalize_dashscope_tool_call,
 )
 from voiceagents.realtime.outbound import RealtimeOutboundEvent, RealtimeOutboundEventKind
+from voiceagents.realtime.outbound import (
+    RealtimeBrowserProxyMessage,
+    RealtimeBrowserProxyMessageType,
+)
 
 
 def normalize(payload: dict[str, object]):
@@ -174,6 +178,50 @@ def test_dashscope_adapter_maps_allowed_tools_to_function_declarations() -> None
     assert all(tool["type"] == "function" for tool in tools)
     assert tools[0]["description"] == "Look up safe order status fields for a confirmed order ID."
     assert tools[0]["parameters"]["properties"]["order_id"]["type"] == "string"
+
+
+def test_dashscope_adapter_maps_browser_control_start_to_session_update() -> None:
+    adapter = DashScopeRealtimeAdapter(
+        DashScopeRealtimeConfig(
+            api_key="dashscope-secret",
+            model=DEFAULT_DASHSCOPE_REALTIME_MODEL,
+            voice="Chelsie",
+            base_url="https://dashscope.aliyuncs.com",
+        )
+    )
+
+    provider_message = adapter.map_browser_message(
+        RealtimeBrowserProxyMessage(
+            type=RealtimeBrowserProxyMessageType.CONTROL,
+            payload={"action": "start"},
+        )
+    )
+
+    assert provider_message["type"] == "session.update"
+    assert provider_message["session"]["voice"] == "Chelsie"
+
+
+def test_dashscope_adapter_maps_browser_audio_to_input_audio_append() -> None:
+    adapter = DashScopeRealtimeAdapter(
+        DashScopeRealtimeConfig(
+            api_key="dashscope-secret",
+            model=DEFAULT_DASHSCOPE_REALTIME_MODEL,
+            voice=None,
+            base_url="https://dashscope.aliyuncs.com",
+        )
+    )
+
+    provider_message = adapter.map_browser_message(
+        RealtimeBrowserProxyMessage(
+            type=RealtimeBrowserProxyMessageType.AUDIO,
+            payload={"frame": "base64-pcm16"},
+        )
+    )
+
+    assert provider_message == {
+        "type": "input_audio_buffer.append",
+        "audio": "base64-pcm16",
+    }
 
 
 def test_dashscope_official_session_and_response_events_normalize() -> None:
