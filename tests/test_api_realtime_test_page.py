@@ -7,6 +7,7 @@ from voiceagents.api.app import create_app
 
 STATIC_PAGE = Path("voiceagents/api/static/realtime-test.html")
 ADAPTER_JS = Path("voiceagents/api/static/realtime-openai-adapter.js")
+DASHSCOPE_ADAPTER_JS = Path("voiceagents/api/static/realtime-dashscope-adapter.js")
 OPENAI_FIXTURE = Path("tests/fixtures/openai_realtime_events.json")
 PHASE4_CHECKLIST = Path("docs/specs/openai-realtime-phase4-browser-checklist.md")
 
@@ -86,6 +87,32 @@ def test_realtime_openai_adapter_route_serves_static_js() -> None:
     assert response.status_code == 200
     assert "javascript" in response.headers["content-type"]
     assert "normalizeOpenAIRealtimeEvent" in response.text
+
+
+def test_realtime_dashscope_adapter_route_serves_static_js() -> None:
+    client = TestClient(create_app())
+
+    response = client.get("/static/realtime-dashscope-adapter.js")
+
+    assert response.status_code == 200
+    assert "javascript" in response.headers["content-type"]
+    assert "connectDashScopeRealtime" in response.text
+
+
+def test_dashscope_browser_adapter_exports_safe_proxy_helpers() -> None:
+    adapter = DASHSCOPE_ADAPTER_JS.read_text(encoding="utf-8")
+
+    assert "buildDashScopeProxyUrl" in adapter
+    assert "connectDashScopeRealtime" in adapter
+    assert "sendDashScopeControl" in adapter
+    assert "sendDashScopeAudio" in adapter
+    assert "sendDashScopeToolResult" in adapter
+    assert "window.voiceAgentsDashScopeRealtimeAdapter" in adapter
+    assert "DASHSCOPE_API_KEY" not in adapter
+    assert "VOICEAGENTS_DASHSCOPE_API_KEY" not in adapter
+    assert "Authorization" not in adapter
+    assert "client_secret" not in adapter
+    assert "raw_audio" not in adapter
 
 
 def test_realtime_test_page_bootstrap_js_uses_client_secret_endpoint() -> None:
