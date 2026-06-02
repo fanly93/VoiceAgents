@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import inspect
 import os
 from pathlib import Path
 from urllib.parse import urlparse
@@ -34,7 +35,11 @@ from voiceagents.realtime.diagnostics import (
     RealtimeDevDiagnostics,
     build_realtime_dev_diagnostics,
 )
-from voiceagents.realtime.dashscope import DashScopeEventError, validate_dashscope_proxy_message
+from voiceagents.realtime.dashscope import (
+    DashScopeEventError,
+    normalize_dashscope_event,
+    validate_dashscope_proxy_message,
+)
 from voiceagents.realtime.event_log import (
     find_blocked_event_keys,
     JsonlRealtimeTranscriptRepository,
@@ -82,6 +87,7 @@ def create_app(
     realtime_event_repository: VoiceEventRepository | None = None,
     realtime_transcript_repository: RealtimeTranscriptRepository | None = None,
     realtime_validation_repository: ValidationRunRepository | None = None,
+    dashscope_upstream_transport: object | None = None,
 ) -> FastAPI:
     app = FastAPI(title="VoiceAgents")
     call_flow_service = CallFlowService(
@@ -106,6 +112,7 @@ def create_app(
     app.state.realtime_transcript_repository = transcript_repository
     app.state.realtime_validation_repository = validation_repository
     app.state.realtime_client_secret_rate_limits = {}
+    app.state.dashscope_upstream_transport = dashscope_upstream_transport
 
     @app.get("/health")
     def health() -> dict[str, str]:
@@ -454,6 +461,29 @@ def create_app(
                     "message_type": safe_message["type"],
                 }
             )
+            if dashscope_upstream_transport is not None:
+                provider_event = await _send_dashscope_upstream(
+                    dashscope_upstream_transport,
+                    safe_message,
+                )
+                normalized_event = normalize_dashscope_event(
+                    provider_event,
+                    session_id=session_id,
+                    call_id=session_store.get_session(session_id).call_id,
+                    merchant_id=session_store.get_session(session_id).merchant_id,
+                )
+                await websocket.send_json(
+                    {
+                        "type": "dashscope.proxy.event",
+                        "event": {
+                            "provider": normalized_event.provider.value,
+                            "event_type": normalized_event.event_type.value,
+                            "state": normalized_event.state.value,
+                            "speaker": normalized_event.speaker,
+                            "text": normalized_event.text,
+                        },
+                    }
+                )
 
     return app
 
@@ -588,3 +618,18 @@ def _parse_provider_expiry(expires_at: str | None) -> datetime | None:
         return datetime.fromisoformat(normalized)
     except ValueError:
         return None
+
+
+async def _send_dashscope_upstream(
+    transport: object,
+    message: dict[str, object],
+) -> dict[str, object]:
+    sender = getattr(transport, "send", None)
+    if sender is None:
+        raise RuntimeError("DashScope upstream transport must define send")
+    result = sender(message)
+    if inspect.isawaitable(result):
+        result = await result
+    if not isinstance(result, dict):
+        raise RuntimeError("DashScope upstream transport returned invalid event")
+    return result
