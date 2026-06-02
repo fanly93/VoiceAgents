@@ -103,6 +103,8 @@ Realtime API endpoints:
 - `POST /v1/realtime/tool-call` relays approved realtime tool calls to the backend. Send the relay token as `Authorization: Bearer <tool_call_token>`.
 - `WS /v1/realtime/dashscope/proxy/{session_id}` is the local browser-facing DashScope realtime proxy route for `server_websocket_proxy` sessions. It must authenticate with the session-bound tool-call token and must never expose `DASHSCOPE_API_KEY` to the browser.
 
+DashScope outbound transport dependency decision: automated tests use only a fake upstream transport behind the proxy boundary. The real outbound DashScope WebSocket client dependency is intentionally deferred until manual provider verification confirms the required protocol details; no automated test calls real DashScope or requires real provider credentials.
+
 Realtime provider environment variables:
 
 - `VOICEAGENTS_REALTIME_PROVIDER=mock|openai_realtime` selects the mock-safe local provider or the OpenAI Realtime provider. Mock mode is the default for development and automated tests.
