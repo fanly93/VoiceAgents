@@ -130,6 +130,14 @@
       </header>
 
       <section>
+        <h2>Dev Diagnostics</h2>
+        <div class="toolbar">
+          <button id="run-diagnostics" type="button">Run Diagnostics</button>
+        </div>
+        <div id="diagnostics-result" data-panel>not_run</div>
+      </section>
+
+      <section>
         <h2>Validation Run</h2>
         <div class="validation-controls">
           <div class="toolbar">
@@ -280,6 +288,30 @@
         if (scenarios.length > 0 && !selector.value) {
           selector.value = scenarios[0].scenario_id;
         }
+      }
+
+      function renderDiagnostics(payload) {
+        const lines = [`overall=${payload.overall_status} provider=${payload.provider}`];
+        (payload.checks || []).forEach((check) => {
+          lines.push(`${check.name}: ${check.status} - ${check.summary}`);
+          if (check.remediation && check.remediation !== "No action needed.") {
+            lines.push(`fix: ${check.remediation}`);
+          }
+        });
+        writePanel("diagnostics-result", lines.join("\n"));
+      }
+
+      async function runDiagnostics() {
+        writePanel("diagnostics-result", "running");
+        const response = await fetch("/v1/realtime/dev-diagnostics");
+        if (!response.ok) {
+          writePanel("diagnostics-result", `diagnostics_error=${response.status}`);
+          return null;
+        }
+        const payload = await response.json();
+        renderDiagnostics(payload);
+        appendPanel("provider-events", `diagnostics=${payload.overall_status}`);
+        return payload;
       }
 
       function parseToolNamesFromPanel() {
@@ -801,6 +833,11 @@
         appendPanel("provider-events", state.isMuted ? "mute_state=muted" : "mute_state=unmuted");
       });
       el("response-mode").addEventListener("change", updateRealtimeResponseMode);
+      el("run-diagnostics").addEventListener("click", () => {
+        runDiagnostics().catch((error) => {
+          writePanel("diagnostics-result", error.message);
+        });
+      });
       el("start-validation-run").addEventListener("click", () => {
         startValidationRun().catch((error) => {
           appendPanel("validation-result", error.message);
@@ -816,6 +853,7 @@
       });
 
       window.voiceAgentsRealtimeTest = {
+        runDiagnostics,
         loadValidationScenarios,
         startValidationRun,
         finishValidationRun,

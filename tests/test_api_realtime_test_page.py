@@ -52,6 +52,22 @@ def test_realtime_test_page_renders_validation_controls() -> None:
     assert "provider_raw_arguments" not in finish_block
 
 
+def test_realtime_test_page_renders_dev_diagnostics_controls() -> None:
+    html = STATIC_PAGE.read_text(encoding="utf-8")
+
+    assert 'id="run-diagnostics"' in html
+    assert 'id="diagnostics-result"' in html
+    assert 'fetch("/v1/realtime/dev-diagnostics"' in html
+    assert "renderDiagnostics" in html
+    diagnostics_block = html.split("async function runDiagnostics", 1)[1].split(
+        "function parseToolNamesFromPanel",
+        1,
+    )[0]
+    assert "clientSecret" not in diagnostics_block
+    assert "toolCallToken" not in diagnostics_block
+    assert "OPENAI_API_KEY" not in diagnostics_block
+
+
 def test_realtime_test_page_route_serves_static_page() -> None:
     client = TestClient(create_app())
 
