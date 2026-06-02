@@ -10,6 +10,7 @@ from voiceagents.realtime.contracts import (
     build_default_realtime_session_config,
 )
 from voiceagents.realtime.providers import (
+    DashScopeRealtimeProvider,
     MockRealtimeProvider,
     OpenAIRealtimeProvider,
     RealtimeProviderError,
@@ -86,6 +87,20 @@ def test_build_realtime_provider_constructs_mock_and_openai_providers() -> None:
 
     assert isinstance(mock_provider, MockRealtimeProvider)
     assert isinstance(openai_provider, OpenAIRealtimeProvider)
+
+
+def test_build_realtime_provider_constructs_dashscope_stub_without_network() -> None:
+    provider = build_realtime_provider(
+        RealtimeProviderName.DASHSCOPE_REALTIME,
+        env={
+            "VOICEAGENTS_DASHSCOPE_REALTIME_MODEL": "qwen3.5-omni-plus-realtime",
+            "VOICEAGENTS_DASHSCOPE_BASE_URL": "https://dashscope.aliyuncs.com",
+        },
+    )
+
+    assert isinstance(provider, DashScopeRealtimeProvider)
+    with pytest.raises(RealtimeProviderError, match="DASHSCOPE_API_KEY"):
+        provider.create_client_secret(make_client_secret_request(ResponseMode.VOICE))
 
 
 def test_mock_realtime_provider_returns_deterministic_credentials() -> None:
