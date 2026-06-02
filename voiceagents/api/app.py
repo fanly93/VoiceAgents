@@ -29,6 +29,10 @@ from voiceagents.realtime.contracts import (
     VoiceEvent,
     VoiceSessionState,
 )
+from voiceagents.realtime.diagnostics import (
+    RealtimeDevDiagnostics,
+    build_realtime_dev_diagnostics,
+)
 from voiceagents.realtime.event_log import (
     find_blocked_event_keys,
     JsonlRealtimeTranscriptRepository,
@@ -123,6 +127,11 @@ def create_app(
     @app.get("/v1/realtime/validation-scenarios")
     def list_realtime_validation_scenarios() -> list:
         return STANDARD_VALIDATION_SCENARIOS
+
+    @app.get("/v1/realtime/dev-diagnostics")
+    def get_realtime_dev_diagnostics(request: Request) -> RealtimeDevDiagnostics:
+        _enforce_realtime_dev_diagnostics_gate(request)
+        return build_realtime_dev_diagnostics()
 
     @app.post("/v1/realtime/validation-runs")
     def start_realtime_validation_run(
@@ -397,6 +406,16 @@ def _enforce_real_provider_dev_gate(
     if current_count >= limit:
         raise HTTPException(status_code=429, detail="Realtime client-secret rate limit exceeded")
     counters[client_host] = current_count + 1
+
+
+def _enforce_realtime_dev_diagnostics_gate(request: Request) -> None:
+    origin = request.headers.get("origin")
+    host = request.headers.get("host")
+    client_host = request.client.host if request.client is not None else "unknown"
+    if origin is not None and not _is_allowed_realtime_dev_origin(origin, host):
+        raise HTTPException(status_code=403, detail="Origin is not allowed for realtime diagnostics")
+    if origin is None and not _is_allowed_realtime_dev_client(client_host):
+        raise HTTPException(status_code=403, detail="Origin is not allowed for realtime diagnostics")
 
 
 def _is_allowed_realtime_dev_origin(origin: str, host: str | None) -> bool:

@@ -237,6 +237,30 @@ function makeHarness(options = {}) {
       if (String(url) === "/v1/realtime/validation-scenarios") {
         return response({ json: [] });
       }
+      if (String(url) === "/v1/realtime/dev-diagnostics") {
+        return response({
+          json: {
+            overall_status: "fail",
+            provider: "openai_realtime",
+            checks: [
+              {
+                name: "openai_dev_gate",
+                status: "fail",
+                summary: "OpenAI realtime dev endpoints are disabled.",
+                detail: "safe detail",
+                remediation: "Set VOICEAGENTS_ENABLE_REALTIME_DEV_ENDPOINTS=true.",
+              },
+              {
+                name: "openai_api_key",
+                status: "pass",
+                summary: "OPENAI_API_KEY is configured on the server.",
+                detail: "configured",
+                remediation: "No action needed.",
+              },
+            ],
+          },
+        });
+      }
       if (options.fetch) {
         return options.fetch(String(url), request, fetchCalls.length);
       }
@@ -276,6 +300,15 @@ function makeHarness(options = {}) {
 }
 
 (async () => {
+  {
+    const harness = makeHarness();
+    await harness.click("run-diagnostics");
+    assert(harness.panel("diagnostics-result").includes("overall=fail provider=openai_realtime"), "diagnostics should render overall status");
+    assert(harness.panel("diagnostics-result").includes("openai_dev_gate: fail"), "diagnostics should render failed check");
+    assert(harness.panel("diagnostics-result").includes("Set VOICEAGENTS_ENABLE_REALTIME_DEV_ENDPOINTS=true."), "diagnostics should render remediation");
+    assert(!harness.panel("diagnostics-result").includes("sk-"), "diagnostics should not render API key values");
+  }
+
   {
     const harness = makeHarness({
       fetch: async (url) => {
