@@ -118,6 +118,18 @@ def test_update_session_state_and_append_runtime_data() -> None:
     assert session.tool_calls[0].tool_name == "lookup_order"
 
 
+def test_get_session_provider_returns_original_provider() -> None:
+    store = InMemoryVoiceSessionStore()
+    store.create_session(
+        session_id="session-123",
+        call_id="call-123",
+        merchant_id="merchant-123",
+        provider=RealtimeProviderName.DASHSCOPE_REALTIME,
+    )
+
+    assert store.get_session_provider("session-123") is RealtimeProviderName.DASHSCOPE_REALTIME
+
+
 def test_mark_handoff_sets_handoff_state() -> None:
     store = InMemoryVoiceSessionStore()
     store.create_session(

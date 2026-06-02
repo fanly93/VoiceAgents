@@ -86,6 +86,9 @@ class InMemoryVoiceSessionStore:
         except KeyError as error:
             raise VoiceSessionNotFound(session_id) from error
 
+    def get_session_provider(self, session_id: str) -> RealtimeProviderName:
+        return self.get_session(session_id).provider
+
     def verify_tool_call_token(
         self,
         session_id: str,
