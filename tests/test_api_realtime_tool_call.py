@@ -197,7 +197,13 @@ def test_realtime_tool_call_endpoint_routes_with_session_provider_when_env_chang
         merchant_id="merchant-123",
         provider=RealtimeProviderName.OPENAI_REALTIME,
     )
-    client = TestClient(create_app(realtime_session_store=store))
+    event_repository = InMemoryVoiceEventRepository()
+    client = TestClient(
+        create_app(
+            realtime_session_store=store,
+            realtime_event_repository=event_repository,
+        )
+    )
 
     response = client.post(
         "/v1/realtime/tool-call",
@@ -213,6 +219,7 @@ def test_realtime_tool_call_endpoint_routes_with_session_provider_when_env_chang
 
     assert response.status_code == 200
     assert response.json()["ok"] is True
+    assert event_repository.events[-1].provider is RealtimeProviderName.OPENAI_REALTIME
 
 
 def test_realtime_tool_call_endpoint_rejects_unknown_tool(monkeypatch) -> None:
