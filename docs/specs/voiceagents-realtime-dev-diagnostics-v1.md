@@ -1,6 +1,6 @@
 # VoiceAgents Realtime Dev Diagnostics v1 Spec
 
-Status: DRAFT / IN PROGRESS
+Status: IMPLEMENTED / READY FOR REVIEW
 Date: 2026-06-02
 Branch: `feat/realtime-dev-diagnostics`
 
@@ -145,3 +145,19 @@ The script must not print secret values.
 7. `scripts/diagnose_realtime_dev.py` exits `0` on pass/warn and exits `1` on fail.
 8. Focused tests pass.
 
+## Implementation Notes
+
+Implemented on `feat/realtime-dev-diagnostics`.
+
+Added:
+
+- `voiceagents/realtime/diagnostics.py`
+- `GET /v1/realtime/dev-diagnostics`
+- `Run Diagnostics` on `/realtime-test`
+- `scripts/diagnose_realtime_dev.py`
+
+Focused validation:
+
+```bash
+./.venv/bin/python -m pytest tests/test_realtime_diagnostics.py tests/test_api_realtime_diagnostics.py tests/test_api_realtime_test_page.py tests/test_realtime_test_page_failure_modes.py tests/test_diagnose_realtime_dev_cli.py -v
+```

@@ -1,6 +1,6 @@
 # VoiceAgents Realtime Dev Diagnostics v1 Tasks
 
-Status: DRAFT / IN PROGRESS
+Status: IMPLEMENTED / READY FOR REVIEW
 Source spec: `docs/specs/voiceagents-realtime-dev-diagnostics-v1.md`
 Branch: `feat/realtime-dev-diagnostics`
 
@@ -26,6 +26,8 @@ Primary files:
 
 ### Task 1.1: Add Diagnostics Models And Environment Checks
 
+Status: DONE
+
 Purpose: model pass/warn/fail checks for realtime dev preflight.
 
 Validation:
@@ -42,6 +44,8 @@ git commit -m "feat: add realtime diagnostics checks"
 ```
 
 ### Task 1.2: Expose Dev Diagnostics Endpoint
+
+Status: DONE
 
 Purpose: return safe server-side diagnostics from `GET /v1/realtime/dev-diagnostics`.
 
@@ -69,6 +73,8 @@ Primary files:
 - Modify `tests/test_realtime_test_page_failure_modes.py` or add a focused JS harness test
 
 ### Task 2.1: Add Diagnostics Button And Safe Panel
+
+Status: DONE
 
 Purpose: render diagnostics output without exposing secrets.
 
@@ -98,6 +104,8 @@ Primary files:
 
 ### Task 3.1: Add Local Diagnostics Script
 
+Status: DONE
+
 Purpose: check `/health` and `/v1/realtime/dev-diagnostics`, print safe results, and exit non-zero on fail.
 
 Validation:
@@ -115,6 +123,8 @@ git commit -m "feat: add realtime diagnostics script"
 
 ### Task 3.2: Document Diagnostics Usage And Handoff
 
+Status: DONE
+
 Purpose: explain when to use diagnostics and keep future session handoff aligned.
 
 Validation:
@@ -130,4 +140,3 @@ Checkpoint:
 git add README.md OPENAI_REALTIME_VOICE_MVP_HANDOFF.md docs/specs/voiceagents-realtime-dev-diagnostics-v1.md docs/specs/voiceagents-realtime-dev-diagnostics-v1-tasks.md
 git commit -m "docs: document realtime dev diagnostics"
 ```
-

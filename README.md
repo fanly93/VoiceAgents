@@ -136,6 +136,16 @@ Run the realtime smoke test against a running mock-mode server:
 
 The realtime smoke script is intentionally mock-mode only. It validates `/health`, client-secret minting, the four approved tool calls, unknown tool rejection, and missing authorization rejection without requiring `OPENAI_API_KEY`. Real OpenAI voice verification is manual; use `docs/specs/voiceagents-openai-realtime-voice-mvp-manual-checklist.md` for the 3 minute `/realtime-test` run and browser failure-mode checks.
 
+Run realtime development diagnostics against a running local server before a real voice test:
+
+```bash
+./.venv/bin/python scripts/diagnose_realtime_dev.py --base-url http://127.0.0.1:8000
+```
+
+The diagnostics script checks `/health` and `GET /v1/realtime/dev-diagnostics` without minting a client secret or calling OpenAI. It reports provider configuration, OpenAI dev gate status, server-side API key presence, transcript logging mode, and client-secret rate-limit configuration without printing secret values.
+
+The `/realtime-test` page also includes a local `Run Diagnostics` button for the same safe preflight checks.
+
 ### Local Realtime Validation Reports
 
 The `/realtime-test` page includes a local validation harness for five standard scenarios:
