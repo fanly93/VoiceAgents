@@ -427,6 +427,8 @@ def create_app(
             error_event_type="dashscope.proxy.error",
             upstream_transport=dashscope_upstream_transport,
             normalize_provider_event=normalize_dashscope_event,
+            event_repository=event_repository,
+            transcript_logging_mode=_current_transcript_logging_mode(),
         )
         await coordinator.run(websocket)
 

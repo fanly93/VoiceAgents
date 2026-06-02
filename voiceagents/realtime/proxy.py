@@ -1,6 +1,8 @@
 import inspect
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from datetime import datetime, timezone
+import uuid
 
 from fastapi import WebSocket
 from starlette.websockets import WebSocketDisconnect
@@ -8,7 +10,11 @@ from starlette.websockets import WebSocketDisconnect
 from voiceagents.realtime.contracts import (
     RealtimeEventIngestRequest,
     RealtimeProviderName,
+    TranscriptLoggingMode,
+    VoiceEvent,
 )
+from voiceagents.realtime.event_log import VoiceEventRepository
+from voiceagents.realtime.redaction import redact_text
 from voiceagents.realtime.session_store import InMemoryVoiceSessionStore, VoiceSessionNotFound
 
 
@@ -28,6 +34,8 @@ class RealtimeProxyCoordinator:
     error_event_type: str
     upstream_transport: object | None = None
     normalize_provider_event: NormalizeProviderEvent | None = None
+    event_repository: VoiceEventRepository | None = None
+    transcript_logging_mode: TranscriptLoggingMode = TranscriptLoggingMode.STRUCTURED
 
     async def run(self, websocket: WebSocket) -> None:
         if not self._authenticate():
@@ -73,6 +81,13 @@ class RealtimeProxyCoordinator:
                     call_id=session.call_id,
                     merchant_id=session.merchant_id,
                 )
+                if self.event_repository is not None:
+                    _persist_normalized_event(
+                        normalized_event,
+                        session_store=self.session_store,
+                        event_repository=self.event_repository,
+                        transcript_logging_mode=self.transcript_logging_mode,
+                    )
                 await websocket.send_json(
                     {
                         "type": "dashscope.proxy.event",
@@ -114,3 +129,57 @@ def _serialize_normalized_event(event: RealtimeEventIngestRequest) -> dict[str, 
         "speaker": event.speaker,
         "text": event.text,
     }
+
+
+def _persist_normalized_event(
+    event: RealtimeEventIngestRequest,
+    *,
+    session_store: InMemoryVoiceSessionStore,
+    event_repository: VoiceEventRepository,
+    transcript_logging_mode: TranscriptLoggingMode,
+) -> None:
+    text_redaction = redact_text(event.text) if event.text is not None else None
+    summary_redaction = (
+        redact_text(event.safe_summary) if event.safe_summary is not None else None
+    )
+    redacted_text = text_redaction.value if text_redaction is not None else None
+    redacted_summary = summary_redaction.value if summary_redaction is not None else None
+    redaction_applied = (
+        (text_redaction.redaction_applied if text_redaction is not None else False)
+        or (summary_redaction.redaction_applied if summary_redaction is not None else False)
+    )
+    structured_text = (
+        redacted_text
+        if transcript_logging_mode is not TranscriptLoggingMode.OFF
+        else None
+    )
+    event_repository.append(
+        VoiceEvent(
+            event_id=str(uuid.uuid4()),
+            timestamp=datetime.now(timezone.utc).isoformat(),
+            session_id=event.session_id,
+            call_id=event.call_id,
+            merchant_id=event.merchant_id,
+            state=event.state,
+            event_type=event.event_type.value,
+            transcript_text_redacted=structured_text if event.speaker == "user" else None,
+            response_text_redacted=structured_text if event.speaker == "assistant" else None,
+            tool_name=event.tool_name,
+            tool_arguments_redacted=None,
+            tool_result_summary=redacted_summary,
+            handoff_reason=None,
+            latency_ms=event.latency_ms,
+            provider=event.provider,
+            provider_event_type=event.provider_event_type,
+            provider_call_id=event.provider_call_id,
+            tool_status=event.tool_status,
+            redaction_applied=redaction_applied,
+        )
+    )
+    if (
+        redacted_text is not None
+        and event.speaker is not None
+        and transcript_logging_mode is not TranscriptLoggingMode.OFF
+    ):
+        session_store.append_transcript(event.session_id, event.speaker, redacted_text)
+    session_store.update_state(event.session_id, event.state)
