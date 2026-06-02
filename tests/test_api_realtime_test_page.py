@@ -178,7 +178,9 @@ def test_realtime_test_page_wires_dashscope_proxy_mode_without_rendering_token()
 
     assert "async function connectDashScopeRealtime" in html
     assert 'payload.connection_mode === "server_websocket_proxy"' in html
-    assert "new WebSocket(proxyUrl)" in html
+    assert 'src="/static/realtime-dashscope-adapter.js"' in html
+    assert "voiceAgentsDashScopeRealtimeAdapter" in html
+    assert "adapter.connectDashScopeRealtime" in html
     assert "dashscope.proxy.ready" in html
     assert "connection_mode=${payload.connection_mode}" in html
     dashscope_block = html.split("async function connectDashScopeRealtime", 1)[1].split(

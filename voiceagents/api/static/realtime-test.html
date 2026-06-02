@@ -189,6 +189,7 @@
       </div>
     </main>
     <script src="/static/realtime-openai-adapter.js"></script>
+    <script src="/static/realtime-dashscope-adapter.js"></script>
     <script>
       const state = {
         sessionId: null,
@@ -655,56 +656,40 @@
         }
       }
 
-      function dashScopeProxyUrl() {
-        if (!state.connectionUrl || !state.toolCallToken) {
-          throw new Error("DashScope proxy connection is not ready.");
-        }
-        const proxyUrl = new URL(state.connectionUrl, window.location.origin);
-        proxyUrl.protocol = proxyUrl.protocol === "https:" ? "wss:" : "ws:";
-        proxyUrl.searchParams.set("token", state.toolCallToken);
-        return proxyUrl.toString();
-      }
-
       async function connectDashScopeRealtime(connectionId) {
-        const proxyUrl = dashScopeProxyUrl();
-        const socket = new WebSocket(proxyUrl);
-        state.dashScopeSocket = socket;
-        await new Promise((resolve, reject) => {
-          socket.addEventListener("open", () => {
-            if (state.activeConnectionId !== connectionId) {
-              socket.close();
-              reject(new Error("Realtime connection was replaced."));
+        const adapter = window.voiceAgentsDashScopeRealtimeAdapter;
+        const socket = await adapter.connectDashScopeRealtime({
+          connectionUrl: state.connectionUrl,
+          token: state.toolCallToken,
+          origin: window.location.origin,
+          isCurrent: () => state.activeConnectionId === connectionId,
+          onOpen: () => {
+            appendPanel("provider-events", "dashscope_proxy=open");
+          },
+          onClose: (closedSocket) => {
+            if (state.dashScopeSocket === closedSocket) {
+              writePanel("session-state", "dashscope_proxy_closed");
+            }
+          },
+          onMessage: (messageEvent) => {
+            const payload = parseProviderMessage(messageEvent.data);
+            if (!payload) {
               return;
             }
-            appendPanel("provider-events", "dashscope_proxy=open");
-            socket.send(JSON.stringify({ type: "control", payload: { action: "start" } }));
-            resolve();
-          }, { once: true });
-          socket.addEventListener("error", () => {
-            reject(new Error("DashScope proxy connection failed."));
-          }, { once: true });
+            if (payload.type === "dashscope.proxy.ready") {
+              appendPanel("provider-events", "dashscope.proxy.ready");
+              return;
+            }
+            if (payload.type === "dashscope.proxy.tool_result") {
+              appendPanel("tool-calls", `${payload.tool_name}: ${payload.tool_status}`);
+              return;
+            }
+            if (payload.type === "dashscope.proxy.event" && payload.event) {
+              renderNormalizedEvent(payload.event);
+            }
+          },
         });
-        socket.addEventListener("close", () => {
-          if (state.dashScopeSocket === socket) {
-            writePanel("session-state", "dashscope_proxy_closed");
-          }
-        });
-        socket.addEventListener("message", (messageEvent) => {
-          const payload = parseProviderMessage(messageEvent.data);
-          if (!payload) {
-            return;
-          }
-          if (payload.type === "dashscope.proxy.ready") {
-            appendPanel("provider-events", "dashscope.proxy.ready");
-            return;
-          }
-          if (payload.type === "dashscope.proxy.event" && payload.event) {
-            renderNormalizedEvent(payload.event);
-            relayNormalizedEvent(payload.event).catch((error) => {
-              appendPanel("provider-events", error.message);
-            });
-          }
-        });
+        state.dashScopeSocket = socket;
       }
 
       async function startSession() {
@@ -926,6 +911,8 @@
         handleProviderEvent,
         connectOpenAIRealtime,
         connectDashScopeRealtime,
+        sendDashScopeAudio: (...args) =>
+          window.voiceAgentsDashScopeRealtimeAdapter.sendDashScopeAudio(...args),
         resetRealtimeResources,
         setDebugSession: (debugSession) => {
           state.sessionId = debugSession.sessionId;
