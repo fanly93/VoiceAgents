@@ -59,68 +59,72 @@ class RealtimeProxyCoordinator:
                 "session_id": self.session_id,
             }
         )
-        while True:
-            try:
-                message = await websocket.receive_json()
-            except WebSocketDisconnect:
-                return
-            try:
-                safe_message = self.validate_message(message)
-            except ValueError:
-                await websocket.send_json(
-                    {
-                        "type": self.error_event_type,
-                        "error_code": "invalid_envelope",
-                    }
-                )
-                await websocket.close(code=1008, reason="Invalid realtime proxy envelope")
-                return
-
-            await websocket.send_json(
-                {
-                    "type": self.accepted_event_type,
-                    "message_type": safe_message["type"],
-                }
-            )
-            if self.upstream_transport is not None and self.normalize_provider_event is not None:
-                provider_event = await _send_upstream(self.upstream_transport, safe_message)
-                session = self.session_store.get_session(self.session_id)
-                if self._is_tool_call_event(provider_event):
-                    tool_response = self._execute_tool_call(provider_event, session)
-                    provider_call_id = _provider_call_id(provider_event)
-                    if self.build_tool_result_messages is not None:
-                        for provider_message in self.build_tool_result_messages(
-                            tool_response,
-                            provider_call_id=provider_call_id,
-                        ):
-                            await _send_upstream(self.upstream_transport, provider_message)
+        try:
+            while True:
+                try:
+                    message = await websocket.receive_json()
+                except WebSocketDisconnect:
+                    return
+                try:
+                    safe_message = self.validate_message(message)
+                except ValueError:
                     await websocket.send_json(
                         {
-                            "type": self.tool_result_event_type,
-                            "tool_name": tool_response.tool_name,
-                            "tool_status": tool_response.tool_status.value,
+                            "type": self.error_event_type,
+                            "error_code": "invalid_envelope",
                         }
                     )
-                    continue
-                normalized_event = self.normalize_provider_event(
-                    provider_event,
-                    session_id=self.session_id,
-                    call_id=session.call_id,
-                    merchant_id=session.merchant_id,
-                )
-                if self.event_repository is not None:
-                    _persist_normalized_event(
-                        normalized_event,
-                        session_store=self.session_store,
-                        event_repository=self.event_repository,
-                        transcript_logging_mode=self.transcript_logging_mode,
-                    )
+                    await websocket.close(code=1008, reason="Invalid realtime proxy envelope")
+                    return
+
                 await websocket.send_json(
                     {
-                        "type": "dashscope.proxy.event",
-                        "event": _serialize_normalized_event(normalized_event),
+                        "type": self.accepted_event_type,
+                        "message_type": safe_message["type"],
                     }
                 )
+                if self.upstream_transport is not None and self.normalize_provider_event is not None:
+                    provider_event = await _send_upstream(self.upstream_transport, safe_message)
+                    session = self.session_store.get_session(self.session_id)
+                    if self._is_tool_call_event(provider_event):
+                        tool_response = self._execute_tool_call(provider_event, session)
+                        provider_call_id = _provider_call_id(provider_event)
+                        if self.build_tool_result_messages is not None:
+                            for provider_message in self.build_tool_result_messages(
+                                tool_response,
+                                provider_call_id=provider_call_id,
+                            ):
+                                await _send_upstream(self.upstream_transport, provider_message)
+                        await websocket.send_json(
+                            {
+                                "type": self.tool_result_event_type,
+                                "tool_name": tool_response.tool_name,
+                                "tool_status": tool_response.tool_status.value,
+                            }
+                        )
+                        continue
+                    normalized_event = self.normalize_provider_event(
+                        provider_event,
+                        session_id=self.session_id,
+                        call_id=session.call_id,
+                        merchant_id=session.merchant_id,
+                    )
+                    if self.event_repository is not None:
+                        _persist_normalized_event(
+                            normalized_event,
+                            session_store=self.session_store,
+                            event_repository=self.event_repository,
+                            transcript_logging_mode=self.transcript_logging_mode,
+                        )
+                    await websocket.send_json(
+                        {
+                            "type": "dashscope.proxy.event",
+                            "event": _serialize_normalized_event(normalized_event),
+                        }
+                    )
+        finally:
+            if self.upstream_transport is not None:
+                await _close_upstream(self.upstream_transport)
 
     def _authenticate(self) -> bool:
         if self.token is None:
@@ -175,6 +179,15 @@ async def _send_upstream(
     if not isinstance(result, dict):
         raise RuntimeError("Realtime upstream transport returned invalid event")
     return result
+
+
+async def _close_upstream(transport: object) -> None:
+    closer = getattr(transport, "close", None)
+    if closer is None:
+        return
+    result = closer()
+    if inspect.isawaitable(result):
+        await result
 
 
 def _serialize_normalized_event(event: RealtimeEventIngestRequest) -> dict[str, object]:
