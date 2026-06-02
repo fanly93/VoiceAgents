@@ -386,7 +386,10 @@ def test_client_secret_response_contains_session_config_and_relay_token() -> Non
         client_secret="mock-client-secret",
         tool_call_token="mock-tool-token",
         connection_url="https://example.invalid/realtime",
+        connection_mode=RealtimeConnectionMode.SERVER_WEBSOCKET_PROXY,
+        ephemeral_credential=None,
         expires_at="2026-05-29T09:00:00Z",
+        credential_expires_at=None,
         model="mock-realtime",
         voice="alloy",
         session_config=RealtimeSessionConfig(
@@ -406,7 +409,55 @@ def test_client_secret_response_contains_session_config_and_relay_token() -> Non
     )
 
     assert response.tool_call_token == "mock-tool-token"
+    assert response.connection_mode is RealtimeConnectionMode.SERVER_WEBSOCKET_PROXY
+    assert response.ephemeral_credential is None
     assert response.session_config.tools[0].name == "lookup_order"
+
+
+def test_client_secret_response_allows_openai_browser_safe_ephemeral_metadata() -> None:
+    response = RealtimeClientSecretResponse(
+        provider=RealtimeProviderName.OPENAI_REALTIME,
+        session_id="session-123",
+        call_id="call-123",
+        client_secret="openai-ephemeral-secret",
+        tool_call_token="voiceagents-local-token",
+        connection_url="https://api.openai.com/v1/realtime/calls",
+        connection_mode=RealtimeConnectionMode.BROWSER_WEBRTC_EPHEMERAL,
+        ephemeral_credential="openai-ephemeral-secret",
+        expires_at="2026-05-30T00:10:00Z",
+        credential_expires_at="2026-05-30T00:10:00Z",
+        model="gpt-realtime-2",
+        voice="marin",
+        session_config=build_default_realtime_session_config(),
+    )
+
+    assert response.provider is RealtimeProviderName.OPENAI_REALTIME
+    assert response.connection_mode is RealtimeConnectionMode.BROWSER_WEBRTC_EPHEMERAL
+    assert response.ephemeral_credential == "openai-ephemeral-secret"
+    assert response.credential_expires_at == "2026-05-30T00:10:00Z"
+
+
+def test_client_secret_response_allows_dashscope_proxy_without_provider_secret() -> None:
+    response = RealtimeClientSecretResponse(
+        provider=RealtimeProviderName.DASHSCOPE_REALTIME,
+        session_id="session-123",
+        call_id="call-123",
+        client_secret=None,
+        tool_call_token="voiceagents-local-token",
+        connection_url="/v1/realtime/proxy/session-123",
+        connection_mode=RealtimeConnectionMode.SERVER_WEBSOCKET_PROXY,
+        ephemeral_credential=None,
+        expires_at=None,
+        credential_expires_at=None,
+        model="qwen3.5-omni-flash-realtime",
+        voice=None,
+        session_config=build_default_realtime_session_config(),
+    )
+
+    assert response.connection_mode is RealtimeConnectionMode.SERVER_WEBSOCKET_PROXY
+    assert response.client_secret is None
+    assert response.ephemeral_credential is None
+    assert "DASHSCOPE_API_KEY" not in response.model_dump_json()
 
 
 def test_tool_call_request_contains_no_body_token() -> None:

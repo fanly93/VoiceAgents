@@ -5,6 +5,7 @@ import voiceagents.api.app as api_app
 from voiceagents.api.app import create_app
 from voiceagents.realtime.contracts import (
     RealtimeClientSecretResponse,
+    RealtimeConnectionMode,
     RealtimeProviderName,
     build_default_realtime_session_config,
 )
@@ -157,11 +158,14 @@ def test_realtime_client_secret_endpoint_rate_limits_real_provider_minting(
                 provider=RealtimeProviderName.OPENAI_REALTIME,
                 session_id=request.session_id,
                 call_id=request.call_id,
-                client_secret="ephemeral-secret",
-                tool_call_token="provider-token-overwritten-by-app",
-                connection_url="https://api.openai.com/v1/realtime/calls",
-                expires_at=None,
-                model="gpt-realtime-2",
+                    client_secret="ephemeral-secret",
+                    tool_call_token="provider-token-overwritten-by-app",
+                    connection_url="https://api.openai.com/v1/realtime/calls",
+                    connection_mode=RealtimeConnectionMode.BROWSER_WEBRTC_EPHEMERAL,
+                    ephemeral_credential="ephemeral-secret",
+                    expires_at=None,
+                    credential_expires_at=None,
+                    model="gpt-realtime-2",
                 voice="marin",
                 session_config=build_default_realtime_session_config(),
             )

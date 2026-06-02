@@ -153,7 +153,10 @@ class RealtimeClientSecretResponse(BaseModel):
     client_secret: str | None
     tool_call_token: str = Field(min_length=1)
     connection_url: str | None
+    connection_mode: RealtimeConnectionMode
+    ephemeral_credential: str | None
     expires_at: str | None
+    credential_expires_at: str | None
     model: str = Field(min_length=1)
     voice: str | None
     session_config: RealtimeSessionConfig
