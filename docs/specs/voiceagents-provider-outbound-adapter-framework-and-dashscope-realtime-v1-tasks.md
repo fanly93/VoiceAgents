@@ -381,7 +381,7 @@ git add tests/test_api_realtime_dashscope_proxy.py
 git commit -m "test: specify realtime proxy fake relay"
 ```
 
-### Task 3.4: Implement fake transport relay paths
+### Task 3.4: Implement fake transport event relay and persistence
 
 Input:
 
@@ -391,8 +391,56 @@ Output:
 
 - Coordinator relays safe browser messages and provider events.
 - Coordinator persists DashScope loggable provider events server-side exactly once.
+
+Test:
+
+```bash
+./.venv/bin/python -m pytest tests/test_api_realtime_dashscope_proxy.py tests/test_realtime_dashscope_adapter.py -v
+```
+
+Expected: event relay and persistence assertions pass; tool/disconnect assertions may still fail.
+
+Commit:
+
+```bash
+git add voiceagents/realtime/proxy.py voiceagents/api/app.py tests/test_api_realtime_dashscope_proxy.py
+git commit -m "feat: persist dashscope proxy events"
+```
+
+### Task 3.5: Implement provider tool-call routing and result relay
+
+Input:
+
+- Remaining failing tool-call tests from Task 3.3.
+
+Output:
+
 - Coordinator routes tool calls through existing `RealtimeToolRouter`.
 - Coordinator sends provider-specific tool result events.
+
+Test:
+
+```bash
+./.venv/bin/python -m pytest tests/test_api_realtime_dashscope_proxy.py tests/test_realtime_dashscope_adapter.py -v
+```
+
+Expected: tool request/result relay assertions pass; disconnect assertions may still fail.
+
+Commit:
+
+```bash
+git add voiceagents/realtime/proxy.py voiceagents/api/app.py tests/test_api_realtime_dashscope_proxy.py
+git commit -m "feat: route dashscope proxy tool calls"
+```
+
+### Task 3.6: Implement provider disconnect cleanup
+
+Input:
+
+- Remaining failing disconnect tests from Task 3.3.
+
+Output:
+
 - Coordinator closes both sides deterministically.
 
 Test:
@@ -407,7 +455,7 @@ Commit:
 
 ```bash
 git add voiceagents/realtime/proxy.py voiceagents/api/app.py tests/test_api_realtime_dashscope_proxy.py
-git commit -m "feat: relay dashscope proxy through fake transport"
+git commit -m "feat: close dashscope proxy cleanly"
 ```
 
 ## Phase 4: Real DashScope Outbound Transport

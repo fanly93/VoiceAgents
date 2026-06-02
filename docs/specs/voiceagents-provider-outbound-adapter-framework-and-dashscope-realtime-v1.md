@@ -209,13 +209,13 @@ Automated tests must be fake-only and local.
 Required focused suites:
 
 ```bash
-./.venv/bin/python -m pytest tests/test_realtime_outbound_contracts.py tests/test_realtime_dashscope_adapter.py tests/test_api_realtime_dashscope_proxy.py -v
+./.venv/bin/python -m pytest tests/test_realtime_outbound_contracts.py tests/test_realtime_dashscope_adapter.py tests/test_realtime_dashscope_transport.py tests/test_api_realtime_dashscope_proxy.py tests/test_api_realtime_test_page.py tests/test_realtime_test_page_failure_modes.py -v
 ```
 
 Required broader realtime suite:
 
 ```bash
-./.venv/bin/python -m pytest tests/test_realtime_providers.py tests/test_realtime_dashscope_provider.py tests/test_realtime_diagnostics.py tests/test_api_realtime_client_secret.py tests/test_api_realtime_tool_call.py tests/test_api_realtime_event.py tests/test_api_realtime_dashscope_proxy.py tests/test_api_realtime_test_page.py tests/test_realtime_test_page_failure_modes.py -v
+./.venv/bin/python -m pytest tests/test_realtime_providers.py tests/test_realtime_dashscope_provider.py tests/test_realtime_dashscope_transport.py tests/test_realtime_diagnostics.py tests/test_api_realtime_client_secret.py tests/test_api_realtime_tool_call.py tests/test_api_realtime_event.py tests/test_api_realtime_dashscope_proxy.py tests/test_api_realtime_test_page.py tests/test_realtime_test_page_failure_modes.py -v
 ```
 
 Before branch completion:
@@ -261,6 +261,7 @@ Likely modified files:
 - `voiceagents/realtime/providers.py`
 - `voiceagents/api/app.py`
 - `voiceagents/api/static/realtime-test.html`
+- `pyproject.toml`, if the outbound transport dependency decision adds a package
 - `tests/test_realtime_dashscope_adapter.py`
 - `tests/test_api_realtime_dashscope_proxy.py`
 - `tests/test_api_realtime_test_page.py`

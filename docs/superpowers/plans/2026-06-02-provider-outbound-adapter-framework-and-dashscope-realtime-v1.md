@@ -362,7 +362,7 @@ git add tests/test_api_realtime_dashscope_proxy.py
 git commit -m "test: specify realtime proxy fake relay"
 ```
 
-### Task 3.4: Implement fake transport relay paths
+### Task 3.4: Implement fake transport event relay and persistence
 
 **Files:**
 - Modify: `voiceagents/realtime/proxy.py`
@@ -371,13 +371,61 @@ git commit -m "test: specify realtime proxy fake relay"
 
 - [ ] **Step 1: Implement relay**
 
-Relay safe browser messages and provider events.
+Relay safe browser messages and provider events, then persist DashScope loggable events server-side exactly once.
 
-- [ ] **Step 2: Implement server-side persistence and tool handling**
+- [ ] **Step 2: Verify partial green**
 
-Persist DashScope loggable events server-side exactly once, route tool calls through `RealtimeToolRouter`, and send provider-specific tool results.
+```bash
+./.venv/bin/python -m pytest tests/test_api_realtime_dashscope_proxy.py tests/test_realtime_dashscope_adapter.py -v
+```
 
-- [ ] **Step 3: Verify green**
+Expected: event relay and persistence assertions pass; tool/disconnect assertions may still fail.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add voiceagents/realtime/proxy.py voiceagents/api/app.py tests/test_api_realtime_dashscope_proxy.py
+git commit -m "feat: persist dashscope proxy events"
+```
+
+### Task 3.5: Implement provider tool-call routing and result relay
+
+**Files:**
+- Modify: `voiceagents/realtime/proxy.py`
+- Modify: `voiceagents/api/app.py`
+- Modify: `tests/test_api_realtime_dashscope_proxy.py`
+
+- [ ] **Step 1: Implement tool handling**
+
+Route provider tool calls through `RealtimeToolRouter` and send provider-specific tool results.
+
+- [ ] **Step 2: Verify partial green**
+
+```bash
+./.venv/bin/python -m pytest tests/test_api_realtime_dashscope_proxy.py tests/test_realtime_dashscope_adapter.py -v
+```
+
+Expected: tool request/result relay assertions pass; disconnect assertions may still fail.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add voiceagents/realtime/proxy.py voiceagents/api/app.py tests/test_api_realtime_dashscope_proxy.py
+git commit -m "feat: route dashscope proxy tool calls"
+```
+
+### Task 3.6: Implement provider disconnect cleanup
+
+**Files:**
+- Modify: `voiceagents/realtime/proxy.py`
+- Modify: `voiceagents/api/app.py`
+- Modify: `tests/test_api_realtime_dashscope_proxy.py`
+
+- [ ] **Step 1: Implement cleanup**
+
+Close browser and provider sides deterministically on provider disconnect, browser disconnect, and validation failure.
+
+- [ ] **Step 2: Verify green**
 
 ```bash
 ./.venv/bin/python -m pytest tests/test_api_realtime_dashscope_proxy.py tests/test_realtime_dashscope_adapter.py -v
@@ -385,11 +433,11 @@ Persist DashScope loggable events server-side exactly once, route tool calls thr
 
 Expected: pass.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 3: Commit**
 
 ```bash
 git add voiceagents/realtime/proxy.py voiceagents/api/app.py tests/test_api_realtime_dashscope_proxy.py
-git commit -m "feat: relay dashscope proxy through fake transport"
+git commit -m "feat: close dashscope proxy cleanly"
 ```
 
 ## Phase 4: Real DashScope Outbound Transport
