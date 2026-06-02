@@ -1,6 +1,6 @@
 # VoiceAgents Other Provider Integration Tasks
 
-Status: PLANNED / NO CODE STARTED
+Status: IMPLEMENTED / LOCAL TESTED
 Source spec: `docs/specs/voiceagents-other-provider-integration.md`
 Branch: `feat/other-provider-integration-planning`
 
@@ -110,7 +110,7 @@ Primary files:
 
 ### Task 1.1: Add Provider Name For DashScope
 
-Status: TODO
+Status: DONE
 
 Inputs:
 
@@ -130,7 +130,7 @@ Validation:
 
 ### Task 1.2: Add Connection Mode Enum
 
-Status: TODO
+Status: DONE
 
 Inputs:
 
@@ -149,7 +149,7 @@ Validation:
 
 ### Task 1.3: Add Provider Capability Model
 
-Status: TODO
+Status: DONE
 
 Inputs:
 
@@ -170,7 +170,7 @@ Validation:
 
 ### Task 1.4: Add Provider Connection Metadata
 
-Status: TODO
+Status: DONE
 
 Inputs:
 
@@ -209,7 +209,7 @@ Primary files:
 
 ### Task 2.1: Add Provider Registry Entries
 
-Status: TODO
+Status: DONE
 
 Inputs:
 
@@ -229,7 +229,7 @@ Validation:
 
 ### Task 2.2: Add Provider Factory For Mock And OpenAI
 
-Status: TODO
+Status: DONE
 
 Inputs:
 
@@ -249,7 +249,7 @@ Validation:
 
 ### Task 2.3: Add DashScope Factory Stub
 
-Status: TODO
+Status: DONE
 
 Inputs:
 
@@ -269,7 +269,7 @@ Validation:
 
 ### Task 2.4: Generalize Provider Diagnostics
 
-Status: TODO
+Status: DONE
 
 Inputs:
 
@@ -289,7 +289,7 @@ Validation:
 
 ### Task 2.5: Add DashScope Diagnostics Checks
 
-Status: TODO
+Status: DONE
 
 Inputs:
 
@@ -329,7 +329,7 @@ Primary files:
 
 ### Task 3.1: Add Session Provider Lookup Test
 
-Status: TODO
+Status: DONE
 
 Inputs:
 
@@ -349,7 +349,7 @@ Validation:
 
 ### Task 3.2: Route Tool Calls With Session Provider
 
-Status: TODO
+Status: DONE
 
 Inputs:
 
@@ -370,7 +370,7 @@ Validation:
 
 ### Task 3.3: Log Tool Events With Session Provider
 
-Status: TODO
+Status: DONE
 
 Inputs:
 
@@ -408,7 +408,7 @@ Primary files:
 
 ### Task 4.1: Add DashScope Config Model
 
-Status: TODO
+Status: DONE
 
 Inputs:
 
@@ -428,7 +428,7 @@ Validation:
 
 ### Task 4.2: Add DashScope Provider Skeleton
 
-Status: TODO
+Status: DONE
 
 Inputs:
 
@@ -448,7 +448,7 @@ Validation:
 
 ### Task 4.3: Add DashScope Session Event Normalization
 
-Status: TODO
+Status: DONE
 
 Inputs:
 
@@ -468,7 +468,7 @@ Validation:
 
 ### Task 4.4: Add DashScope Transcript Event Normalization
 
-Status: TODO
+Status: DONE
 
 Inputs:
 
@@ -488,7 +488,7 @@ Validation:
 
 ### Task 4.5: Add DashScope Tool Event Normalization
 
-Status: TODO
+Status: DONE
 
 Inputs:
 
@@ -508,7 +508,7 @@ Validation:
 
 ### Task 4.6: Add DashScope Safe Tool Result Event Builder
 
-Status: TODO
+Status: DONE
 
 Inputs:
 
@@ -551,7 +551,7 @@ Primary files:
 
 ### Task 5.1: Decide And Document Proxy Endpoint
 
-Status: TODO
+Status: DONE
 
 Inputs:
 
@@ -571,7 +571,7 @@ Validation:
 
 ### Task 5.2: Return DashScope Proxy Metadata To Browser
 
-Status: TODO
+Status: DONE
 
 Inputs:
 
@@ -591,7 +591,7 @@ Validation:
 
 ### Task 5.3: Add Proxy Route Authentication
 
-Status: TODO
+Status: DONE
 
 Inputs:
 
@@ -612,7 +612,7 @@ Validation:
 
 ### Task 5.4: Add Proxy Message Envelope Validation
 
-Status: TODO
+Status: DONE
 
 Inputs:
 
@@ -632,7 +632,7 @@ Validation:
 
 ### Task 5.5: Add Fake Upstream Relay
 
-Status: TODO
+Status: DONE
 
 Inputs:
 
@@ -654,7 +654,7 @@ Validation:
 
 ### Task 5.6: Add Outbound Transport Dependency Decision
 
-Status: TODO
+Status: DONE
 
 Inputs:
 
@@ -676,7 +676,7 @@ git diff --check
 
 ### Task 5.7: Add Utilitarian DashScope Test Page Wiring
 
-Status: TODO
+Status: DONE
 
 Inputs:
 
@@ -696,7 +696,7 @@ Validation:
 
 ### Task 5.8: Add DashScope Manual Checklist
 
-Status: TODO
+Status: DONE
 
 Inputs:
 
@@ -717,7 +717,7 @@ git diff --check
 
 ### Task 5.9: Run Focused And Full Verification
 
-Status: TODO
+Status: DONE
 
 Inputs:
 
